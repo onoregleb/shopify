@@ -1,5 +1,5 @@
 import { json } from "@remix-run/node";
-import { useSubmit, useActionData } from "@remix-run/react";
+import { useNavigate, useSubmit, useActionData } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -10,10 +10,9 @@ import {
   Button,
   List,
   Banner,
+  Loading,
 } from "@shopify/polaris";
-import { useEffect } from "react";
-import { useAppBridge } from "@shopify/app-bridge-react";
-import { Redirect } from "@shopify/app-bridge/actions";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 
 const PLANS = [
@@ -118,14 +117,18 @@ export async function action({ request }) {
 }
 
 export default function Billing() {
-  const app = useAppBridge();
-  const redirect = Redirect.create(app);
+  const navigate = useNavigate();
   const submit = useSubmit();
   const actionData = useActionData();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     if (actionData?.confirmationUrl) {
-      window.location.href = actionData.confirmationUrl;
+      setIsRedirecting(true);
+      // Используем setTimeout чтобы дать время состоянию обновиться
+      setTimeout(() => {
+        window.location.assign(actionData.confirmationUrl);
+      }, 100);
     }
   }, [actionData]);
 
@@ -133,17 +136,14 @@ export default function Billing() {
     submit({ planIndex }, { method: "POST" });
   };
 
-  const handleBack = () => {
-    redirect.dispatch(Redirect.Action.APP, '/app');
-  };
-
   return (
     <Page
       title="Choose Your Plan"
-      backAction={{ content: "Back", onAction: handleBack }}
+      backAction={{ content: "Back", onAction: () => navigate("/app") }}
     >
       <Layout>
         <Layout.Section>
+          {isRedirecting && <Loading />}
           <BlockStack gap="500">
             {actionData?.error && (
               <Banner status="critical">
