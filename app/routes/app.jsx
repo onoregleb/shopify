@@ -1,4 +1,5 @@
 import { Outlet, useLoaderData, useRouteError } from "@remix-run/react";
+import { json } from "@remix-run/node";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
@@ -8,7 +9,10 @@ export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", shop: session.shop };
+  return json({
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    shop: session.shop,
+  });
 };
 
 export default function App() {
@@ -16,9 +20,9 @@ export default function App() {
 
   return (
     <AppProvider 
-      isEmbeddedApp 
+      isEmbeddedApp
       apiKey={apiKey}
-      host={shop}
+      shop={shop}
       forceRedirect
     >
       <Outlet />

@@ -1,5 +1,5 @@
 import { json } from "@remix-run/node";
-import { useNavigate, useSubmit, useActionData } from "@remix-run/react";
+import { useNavigate, useSubmit, useActionData, useLoaderData } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -56,17 +56,29 @@ const PLANS = [
 ];
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  console.log('Billing loader: Starting authentication');
+  const { admin, session } = await authenticate.admin(request);
+  console.log('Billing loader: Authentication successful, shop:', session.shop);
+  return json({
+    shop: session.shop
+  });
 };
 
 export async function action({ request }) {
-  const { admin } = await authenticate.admin(request);
+  console.log('Billing action: Starting subscription creation');
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const planIndex = Number(formData.get("planIndex"));
   const plan = PLANS[planIndex];
+  
+  console.log('Billing action: Processing plan:', { 
+    planName: plan.name, 
+    price: plan.price,
+    shopDomain: session.shop 
+  });
 
   try {
+    console.log('Billing action: Sending GraphQL mutation');
     const response = await admin.graphql(
       `#graphql
         mutation createSubscription($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!) {
@@ -101,18 +113,33 @@ export async function action({ request }) {
               },
             },
           ],
-          returnUrl: `${process.env.SHOPIFY_APP_URL}/app/integration`,
+          returnUrl: `${process.env.SHOPIFY_APP_URL}/app/integration`
         },
       }
     );
 
     const responseJson = await response.json();
-    const confirmationUrl = responseJson.data?.appSubscriptionCreate?.confirmationUrl;
+    console.log('Billing action: GraphQL response:', responseJson);
     
+    const confirmationUrl = responseJson.data?.appSubscriptionCreate?.confirmationUrl;
+    const userErrors = responseJson.data?.appSubscriptionCreate?.userErrors;
+
+    if (userErrors?.length > 0) {
+      console.error('Billing action: User errors:', userErrors);
+      return json({ error: userErrors[0].message }, { status: 400 });
+    }
+    
+    if (!confirmationUrl) {
+      console.error('Billing action: No confirmation URL in response');
+      return json({ error: "Failed to create subscription: No confirmation URL received" }, { status: 500 });
+    }
+
+    console.log('Billing action: Success, confirmation URL:', confirmationUrl);
     return json({ confirmationUrl });
   } catch (error) {
-    console.error("Error creating subscription:", error);
-    return json({ error: "Failed to create subscription" }, { status: 500 });
+    console.error("Billing action: Error creating subscription:", error);
+    console.error("Error stack:", error.stack);
+    return json({ error: "Failed to create subscription: " + error.message }, { status: 500 });
   }
 }
 
@@ -120,20 +147,26 @@ export default function Billing() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const actionData = useActionData();
+  const loaderData = useLoaderData();
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
+    console.log('Billing component: Mounted');
     if (actionData?.confirmationUrl) {
+      console.log('Billing component: Redirecting to:', actionData.confirmationUrl);
       setIsRedirecting(true);
-      // Используем setTimeout чтобы дать время состоянию обновиться
-      setTimeout(() => {
-        window.location.assign(actionData.confirmationUrl);
-      }, 100);
+      // Используем window.open вместо window.location.href
+      const confirmWindow = window.open(actionData.confirmationUrl, '_blank');
+      if (!confirmWindow) {
+        console.error('Popup was blocked. Falling back to direct navigation.');
+        window.location.href = actionData.confirmationUrl;
+      }
     }
   }, [actionData]);
 
   const handleSubscribe = (planIndex) => {
-    submit({ planIndex }, { method: "POST" });
+    console.log('Billing component: Subscribing to plan index:', planIndex);
+    submit({ planIndex }, { method: "POST", replace: true });
   };
 
   return (

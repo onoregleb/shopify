@@ -17,7 +17,48 @@ import { authenticate } from "../shopify.server";
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   
-  // Check if theme app extension is installed
+  // Получаем charge_id из URL
+  const url = new URL(request.url);
+  const chargeId = url.searchParams.get("charge_id");
+  
+  if (chargeId) {
+    try {
+      // Активируем подписку
+      const activateResponse = await admin.graphql(
+        `#graphql
+          mutation activateSubscription($id: ID!) {
+            appSubscriptionActivate(id: $id) {
+              appSubscription {
+                id
+                status
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        {
+          variables: {
+            id: chargeId
+          }
+        }
+      );
+
+      const activateData = await activateResponse.json();
+      const userErrors = activateData.data?.appSubscriptionActivate?.userErrors;
+      
+      if (userErrors?.length > 0) {
+        return json({ error: userErrors[0].message }, { status: 400 });
+      }
+    } catch (error) {
+      console.error("Error activating subscription:", error);
+      return json({ error: "Failed to activate subscription" }, { status: 500 });
+    }
+  }
+
+  // Проверяем текущую подписку
   const response = await admin.graphql(
     `#graphql
       query {
@@ -45,7 +86,8 @@ export const loader = async ({ request }) => {
 
   const data = await response.json();
   return json({
-    hasActiveSubscription: data?.currentAppInstallation?.activeSubscriptions?.length > 0
+    hasActiveSubscription: data?.currentAppInstallation?.activeSubscriptions?.length > 0,
+    subscriptionStatus: data?.currentAppInstallation?.activeSubscriptions?.[0]?.status
   });
 };
 

@@ -3,8 +3,9 @@
 client_id = "ed545dd3d592ece9c195d3a8b84d6ded"
 name = "modera-fashion-app"
 handle = "modera-fashion-app"
-application_url = "https://localhost:53794"
+application_url = "https://localhost:57680"
 embedded = true
+distribution_public = true
 
 [webhooks]
 api_version = "2025-04"
@@ -13,19 +14,15 @@ api_version = "2025-04"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
-  [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
-
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://localhost:53794/auth/callback",
-  "https://localhost:53794/auth/shopify/callback",
-  "https://localhost:53794/api/auth/callback"
+  "https://localhost:57680/auth/callback",
+  "https://localhost:57680/auth/shopify/callback",
+  "https://localhost:57680/api/auth/callback"
 ]
 
 [pos]
@@ -33,3 +30,4 @@ embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
+include_config_on_deploy = true
