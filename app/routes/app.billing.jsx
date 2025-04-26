@@ -1,19 +1,10 @@
 import { json } from "@remix-run/node";
 import { useNavigate, useSubmit, useActionData, useLoaderData } from "@remix-run/react";
-import {
-  Page,
-  Layout,
-  Card,
-  BlockStack,
-  Text,
-  InlineGrid,
-  Button,
-  List,
-  Banner,
-  Loading,
-} from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, InlineGrid, Button, List, Banner, Loading, Modal } from "@shopify/polaris";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { Redirect } from "@shopify/app-bridge/actions";
 
 const PLANS = [
   {
@@ -56,37 +47,77 @@ const PLANS = [
 ];
 
 export const loader = async ({ request }) => {
-  console.log('Billing loader: Starting authentication');
   const { admin, session } = await authenticate.admin(request);
-  console.log('Billing loader: Authentication successful, shop:', session.shop);
-  return json({
-    shop: session.shop
-  });
+
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query getSubscriptions {
+          currentAppInstallation {
+            activeSubscriptions {
+              id
+              status
+              lineItems {
+                plan {
+                  pricingDetails {
+                    ... on AppRecurringPricing {
+                      price {
+                        amount
+                        currencyCode
+                      }
+                      interval
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `
+    );
+
+    const data = await response.json();
+    return json({
+      shop: session.shop,
+      hasActiveSubscription: data?.data?.currentAppInstallation?.activeSubscriptions?.length > 0,
+      currentSubscription: data?.data?.currentAppInstallation?.activeSubscriptions?.[0],
+      isAuthenticated: true
+    });
+  } catch (error) {
+    console.error('Error checking subscription:', error);
+    return json({
+      error: "Failed to check subscription status",
+      shop: session.shop,
+      isAuthenticated: true
+    });
+  }
 };
 
 export async function action({ request }) {
-  console.log('Billing action: Starting subscription creation');
+  console.log('Billing Action: Starting subscription creation');
   const { admin, session } = await authenticate.admin(request);
+
+  if (!session?.shop) {
+    return json({ error: "Invalid session" }, { status: 401 });
+  }
+
   const formData = await request.formData();
   const planIndex = Number(formData.get("planIndex"));
   const plan = PLANS[planIndex];
-  
-  console.log('Billing action: Processing plan:', { 
-    planName: plan.name, 
-    price: plan.price,
-    shopDomain: session.shop 
-  });
+
+  const shop = session.shop;
+  const baseUrl = process.env.SHOPIFY_APP_URL;
+  const returnUrl = `${baseUrl}/app/billing/callback?shop=${shop}`;
 
   try {
-    console.log('Billing action: Sending GraphQL mutation');
     const response = await admin.graphql(
       `#graphql
-        mutation createSubscription($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!) {
+        mutation createSubscription($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean!) {
           appSubscriptionCreate(
             name: $name
             lineItems: $lineItems
             returnUrl: $returnUrl
-            test: true
+            test: $test
           ) {
             appSubscription {
               id
@@ -113,33 +144,44 @@ export async function action({ request }) {
               },
             },
           ],
-          returnUrl: `${process.env.SHOPIFY_APP_URL}/app/integration`
+          returnUrl,
+          test: true
         },
       }
     );
 
     const responseJson = await response.json();
-    console.log('Billing action: GraphQL response:', responseJson);
-    
+    console.log('Billing Action: GraphQL response:', responseJson);
+
     const confirmationUrl = responseJson.data?.appSubscriptionCreate?.confirmationUrl;
     const userErrors = responseJson.data?.appSubscriptionCreate?.userErrors;
 
     if (userErrors?.length > 0) {
-      console.error('Billing action: User errors:', userErrors);
+      console.error('Billing Action: User errors:', userErrors);
       return json({ error: userErrors[0].message }, { status: 400 });
     }
     
     if (!confirmationUrl) {
-      console.error('Billing action: No confirmation URL in response');
-      return json({ error: "Failed to create subscription: No confirmation URL received" }, { status: 500 });
+      console.error('Billing Action: No confirmation URL received');
+      return json({ error: "Failed to create subscription" }, { status: 500 });
     }
 
-    console.log('Billing action: Success, confirmation URL:', confirmationUrl);
-    return json({ confirmationUrl });
+    // Добавляем параметры для восстановления сессии к URL подтверждения
+    const finalConfirmationUrl = new URL(confirmationUrl);
+    finalConfirmationUrl.searchParams.set('shop', shop);
+
+    console.log('Billing Action: Success. Final confirmation URL:', finalConfirmationUrl.toString());
+    return json({ 
+      confirmationUrl: finalConfirmationUrl.toString(),
+      shop,
+      success: true 
+    });
   } catch (error) {
-    console.error("Billing action: Error creating subscription:", error);
-    console.error("Error stack:", error.stack);
-    return json({ error: "Failed to create subscription: " + error.message }, { status: 500 });
+    console.error("Billing Action: Error creating subscription:", error);
+    return json({ 
+      error: "Failed to create subscription. Please try again.",
+      details: error.message 
+    }, { status: 500 });
   }
 }
 
@@ -148,25 +190,48 @@ export default function Billing() {
   const submit = useSubmit();
   const actionData = useActionData();
   const loaderData = useLoaderData();
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const app = useAppBridge();
 
   useEffect(() => {
-    console.log('Billing component: Mounted');
-    if (actionData?.confirmationUrl) {
-      console.log('Billing component: Redirecting to:', actionData.confirmationUrl);
-      setIsRedirecting(true);
-      // Используем window.open вместо window.location.href
-      const confirmWindow = window.open(actionData.confirmationUrl, '_blank');
-      if (!confirmWindow) {
-        console.error('Popup was blocked. Falling back to direct navigation.');
-        window.location.href = actionData.confirmationUrl;
-      }
+    if (actionData?.error) {
+      console.log('Billing component: Error detected', actionData.error);
+      setIsLoading(false);
+      return;
+    }
+
+    if (actionData?.confirmationUrl && actionData?.success) {
+      console.log('Billing component: Processing redirect');
+      setShowAuthModal(true);
+      
+      const performRedirect = () => {
+        console.log('Billing component: Attempting redirect to:', actionData.confirmationUrl);
+        
+        try {
+          const popupWindow = window.open(actionData.confirmationUrl, '_blank');
+          
+          if (popupWindow) {
+            console.log('Billing component: Opened in new window');
+            setShowAuthModal(false);
+          } else {
+            console.log('Billing component: Popup blocked, trying direct navigation');
+            window.location.href = actionData.confirmationUrl;
+          }
+        } catch (error) {
+          console.error('Billing component: Redirect failed:', error);
+          window.location.href = actionData.confirmationUrl;
+        }
+      };
+
+      const timer = setTimeout(performRedirect, 1000);
+      return () => clearTimeout(timer);
     }
   }, [actionData]);
 
   const handleSubscribe = (planIndex) => {
-    console.log('Billing component: Subscribing to plan index:', planIndex);
-    submit({ planIndex }, { method: "POST", replace: true });
+    setIsLoading(true);
+    submit({ planIndex }, { method: "POST" });
   };
 
   return (
@@ -176,16 +241,43 @@ export default function Billing() {
     >
       <Layout>
         <Layout.Section>
-          {isRedirecting && <Loading />}
+          {isLoading && <Loading />}
+          
+          <Modal
+            open={showAuthModal}
+            title="Переход к оплате"
+            onClose={() => setShowAuthModal(false)}
+          >
+            <Modal.Section>
+              <BlockStack gap="400">
+                <Text as="p">
+                  Сейчас откроется страница оплаты Shopify в новом окне. 
+                  Если окно не открылось автоматически, нажмите кнопку ниже.
+                </Text>
+                {actionData?.confirmationUrl && (
+                  <Button
+                    primary
+                    onClick={() => window.open(actionData.confirmationUrl, '_blank')}
+                  >
+                    Открыть страницу оплаты
+                  </Button>
+                )}
+                <Loading />
+              </BlockStack>
+            </Modal.Section>
+          </Modal>
+
           <BlockStack gap="500">
             {actionData?.error && (
               <Banner status="critical">
                 {actionData.error}
               </Banner>
             )}
+
             <Text as="h2" variant="headingXl">
               Select a plan that fits your business
             </Text>
+            
             <InlineGrid columns={3} gap="500">
               {PLANS.map((plan, index) => (
                 <Card key={plan.name}>
@@ -209,6 +301,7 @@ export default function Billing() {
                     <Button
                       primary={index === 1}
                       onClick={() => handleSubscribe(index)}
+                      loading={isLoading}
                       fullWidth
                     >
                       Choose {plan.name}

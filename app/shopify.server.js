@@ -3,6 +3,7 @@ import {
   ApiVersion,
   AppDistribution,
   shopifyApp,
+  LATEST_API_VERSION,
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
@@ -18,15 +19,24 @@ const shopify = shopifyApp({
   distribution: AppDistribution.Custom,
   future: {
     unstable_newEmbeddedAuthStrategy: true,
+    v3_authenticatePublic: true,
+    v3_assetModule: true,
     removeRest: true,
+    unstable_jwt: true
   },
+  hooks: {
+    afterAuth: async ({ session }) => {
+      shopify.registerWebhooks({ session });
+    },
+  },
+  isEmbeddedApp: true,
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
 });
 
 export default shopify;
-export const apiVersion = ApiVersion.January25;
+export const apiVersion = LATEST_API_VERSION;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
 export const unauthenticated = shopify.unauthenticated;

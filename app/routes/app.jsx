@@ -8,7 +8,16 @@ import { authenticate } from "../shopify.server";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }) => {
+  console.log('App loader: Starting authentication');
   const { admin, session } = await authenticate.admin(request);
+  
+  console.log('App loader: Authentication complete', {
+    hasSession: !!session,
+    hasShop: !!session?.shop,
+    shop: session?.shop,
+    hasAccessToken: !!session?.accessToken
+  });
+
   return json({
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
@@ -17,6 +26,7 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey, shop } = useLoaderData();
+  console.log('App component: Rendering with:', { apiKey: !!apiKey, shop });
 
   return (
     <AppProvider 
@@ -24,6 +34,7 @@ export default function App() {
       apiKey={apiKey}
       shop={shop}
       forceRedirect
+      iframeRefresh={false}
     >
       <Outlet />
     </AppProvider>
@@ -31,7 +42,9 @@ export default function App() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  console.error('App error boundary:', error);
+  return boundary.error(error);
 }
 
 export const headers = (headersArgs) => {
