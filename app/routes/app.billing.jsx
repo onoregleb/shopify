@@ -4,7 +4,6 @@ import { Page, Layout, Card, BlockStack, Text, InlineGrid, Button, List, Banner,
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Redirect } from "@shopify/app-bridge/actions";
 
 const PLANS = [
   {

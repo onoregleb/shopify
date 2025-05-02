@@ -18,7 +18,7 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.Custom,
   future: {
-    unstable_newEmbeddedAuthStrategy: true,
+    unstable_newEmbeddedAuthStrategy: false,
     v3_authenticatePublic: true,
     v3_assetModule: true,
     removeRest: true,
@@ -43,3 +43,14 @@ export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;
+export const getSessionByShop = async (shop) => {
+  const session = await prisma.session.findFirst({
+    where: { shop },
+  });
+
+  if (!session || !session.accessToken) {
+    throw new Error("No session found for shop: " + shop);
+  }
+
+  return session;
+};

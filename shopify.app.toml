@@ -3,7 +3,7 @@
 client_id = "ed545dd3d592ece9c195d3a8b84d6ded"
 name = "modera-fashion-app"
 handle = "modera-fashion-app"
-application_url = "https://localhost:53002"
+application_url = "https://localhost:63491"
 embedded = true
 distribution_public = true
 
@@ -20,9 +20,9 @@ scopes = "read_products,write_products,write_draft_orders,write_orders,write_cus
 
 [auth]
 redirect_urls = [
-  "https://localhost:53002/auth/callback",
-  "https://localhost:53002/auth/shopify/callback",
-  "https://localhost:53002/api/auth/callback"
+  "https://localhost:63491/auth/callback",
+  "https://localhost:63491/auth/shopify/callback",
+  "https://localhost:63491/api/auth/callback"
 ]
 
 [pos]
