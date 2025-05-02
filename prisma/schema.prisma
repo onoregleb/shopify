@@ -1,23 +1,19 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// schema.prisma
 
 generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
 }
 
 model Session {
-  id            String    @id
+  id            String         @id
   shop          String
   state         String
-  isOnline      Boolean   @default(false)
+  isOnline      Boolean        @default(false)
   scope         String?
   expires       DateTime?
   accessToken   String
@@ -25,8 +21,24 @@ model Session {
   firstName     String?
   lastName      String?
   email         String?
-  accountOwner  Boolean   @default(false)
+  accountOwner  Boolean        @default(false)
   locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  collaborator  Boolean?       @default(false)
+  emailVerified Boolean?       @default(false)
+
+  // Добавляем связь к подпискам
+  subscriptions Subscription[] // см. ниже
+}
+
+model Subscription {
+  id             Int       @id @default(autoincrement())
+  chargeId       String    @unique   // GID или просто numeric ID
+  status         String               // e.g. "ACTIVE", "GRACE_PERIOD"
+  name           String               // имя плана
+  test           Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  shop           String               // дублируем для удобных запросов
+  sessionId      String               // внешний ключ к Session.id
+  session        Session   @relation(fields: [sessionId], references: [id])
 }
