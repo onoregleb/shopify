@@ -110,27 +110,90 @@ export const loader = async ({ request }) => {
     const redirectUrl = new URL("/app/integration", baseUrl);
     redirectUrl.searchParams.set("shop", shop);
     
+    // Add embedding params for Shopify App Bridge
+    const apiKey = process.env.SHOPIFY_API_KEY;
+    const host = btoa(`${shop}/admin`);
+    redirectUrl.searchParams.set("host", host);
+    redirectUrl.searchParams.set("embedded", "1");  // Force embedded mode
+    if (apiKey) {
+      redirectUrl.searchParams.set("apiKey", apiKey);
+    }
+    
     console.log("Billing Callback: Setting redirect URL with shop parameter:", redirectUrl.toString());
     
     // Если есть открывшее окно, перенаправляем его, иначе закрываем текущее
     return new Response(
       `
       <html>
-        <body>
-          <h2>Processing your subscription...</h2>
-          <p>Your payment has been confirmed. You'll be redirected to complete setup.</p>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 40px;">
+          <h2>Payment Successful!</h2>
+          <p>Your subscription has been activated.</p>
+          <div style="margin: 30px 0;">
+            <button id="continueBtn" style="padding: 10px 20px; background-color: #008060; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+              Continue to Setup
+            </button>
+          </div>
+          <p><small>This window will automatically close after redirecting.</small></p>
+          
           <script>
-            console.log("Redirect URL: ${redirectUrl.toString()}");
-            setTimeout(function() {
-              if (window.opener && !window.opener.closed) {
-                console.log("Redirecting opener window to: ${redirectUrl.toString()}");
-                window.opener.location.href = "${redirectUrl.toString()}";
-                window.close();
-              } else {
-                console.log("No opener window, redirecting current window to: ${redirectUrl.toString()}");
-                window.location.href = "${redirectUrl.toString()}";
+            // Direct function to handle redirection via auth
+            function redirectToApp() {
+              const targetUrl = "${redirectUrl.toString()}";
+              console.log("Redirecting to:", targetUrl);
+              
+              // Create a redirect form with POST to maintain session
+              function createRedirectForm(url) {
+                const form = document.createElement('form');
+                form.method = 'GET';  // Using GET instead of POST for better compatibility
+                form.action = url;
+                
+                // Add all URL parameters as hidden inputs
+                const urlObj = new URL(url);
+                for (const [key, value] of urlObj.searchParams.entries()) {
+                  const input = document.createElement('input');
+                  input.type = 'hidden';
+                  input.name = key;
+                  input.value = value;
+                  form.appendChild(input);
+                }
+                
+                return form;
               }
-            }, 2000);
+              
+              // If we have an opener, update it and close this window
+              if (window.opener && !window.opener.closed) {
+                try {
+                  // First try to redirect the opener directly
+                  window.opener.location.href = targetUrl;
+                  console.log("Redirected opener window");
+                  setTimeout(() => window.close(), 500);
+                } catch (e) {
+                  console.error("Error redirecting opener:", e);
+                  
+                  // If direct redirect fails, try with a form
+                  try {
+                    const form = createRedirectForm(targetUrl);
+                    document.body.appendChild(form);
+                    window.opener.document.body.appendChild(form);
+                    form.submit();
+                    setTimeout(() => window.close(), 500);
+                  } catch (formError) {
+                    console.error("Form redirect failed:", formError);
+                    // If that also fails, redirect this window
+                    window.location.href = targetUrl;
+                  }
+                }
+              } else {
+                // No opener, redirect this window
+                window.location.href = targetUrl;
+              }
+            }
+            
+            // Add click handler to the button
+            document.getElementById('continueBtn').addEventListener('click', redirectToApp);
+            
+            // Also redirect automatically after a delay
+            setTimeout(redirectToApp, 3000);
           </script>
         </body>
       </html>

@@ -318,7 +318,7 @@ export default function Billing() {
               {PLANS.map((plan, index) => (
                 <div key={plan.name} style={{ height: '100%' }}>
                   <Card 
-                    padding="500"
+                    padding="400"
                     style={{ 
                       height: '100%', 
                       display: 'flex', 
@@ -326,7 +326,7 @@ export default function Billing() {
                       position: 'relative',
                       border: plan.recommended ? `2px solid ${plan.color}` : undefined,
                       boxShadow: plan.recommended ? '0 4px 16px rgba(0, 0, 0, 0.08)' : undefined,
-                      minHeight: '800px'
+                      minHeight: '680px'
                     }}
                   >
                     {plan.recommended && (
@@ -346,15 +346,15 @@ export default function Billing() {
                         MOST POPULAR
                       </div>
                     )}
-                    <BlockStack gap="600" style={{ height: '100%' }}>
-                      <BlockStack gap="400">
+                    <BlockStack gap="300" style={{ height: '100%' }}>
+                      <BlockStack gap="200">
                         <Text as="h3" variant="headingLg" alignment="center">
                           {plan.name}
                         </Text>
                         <Text variant="bodyMd" color="subdued" alignment="center">
                           {plan.subtitle}
                         </Text>
-                        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                        <div style={{ textAlign: 'center', marginTop: '8px' }}>
                           <Text as="p" variant="heading2xl" fontWeight="bold">
                             ${plan.price}
                             <Text as="span" variant="bodyMd" color="subdued">
@@ -367,32 +367,33 @@ export default function Billing() {
                       <div style={{ 
                         height: '1px', 
                         background: 'rgba(0, 0, 0, 0.07)', 
-                        width: '100%' 
+                        width: '100%',
+                        margin: '12px 0'
                       }}></div>
                       
-                      <div style={{ flex: 1, padding: '20px 0' }}>
-                        <BlockStack gap="600">
+                      <div style={{ flex: 1, padding: '8px 0' }}>
+                        <BlockStack gap="300">
                           {plan.features.map((feature) => (
                             <div key={feature} style={{ 
                               display: 'flex', 
                               alignItems: 'flex-start', 
-                              gap: '15px',
-                              marginBottom: '15px'
+                              gap: '8px',
+                              marginBottom: '6px'
                             }}>
                               <div style={{ 
                                 color: plan.color, 
                                 fontWeight: 'bold', 
-                                fontSize: '22px',
-                                minWidth: '30px',
-                                marginTop: '2px'
+                                fontSize: '18px',
+                                minWidth: '18px',
+                                marginTop: '0'
                               }}>
                                 ✓
                               </div>
                               <div style={{ 
                                 color: '#202223', 
                                 fontWeight: 'medium', 
-                                fontSize: '16px',
-                                lineHeight: '24px'
+                                fontSize: '14px',
+                                lineHeight: '20px'
                               }}>
                                 {feature}
                               </div>

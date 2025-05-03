@@ -128,8 +128,20 @@ export async function loader({ request }) {
       };
       
       try {
-        // If you have session storage to get the settings, you could use it here
-        // This would be replaced with actual storage access in a production app
+        // Try to load settings from the API
+        const settingsResponse = await fetch(`${process.env.SHOPIFY_APP_URL || ''}/api/button-settings`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.accessToken}`
+          }
+        });
+        
+        if (settingsResponse.ok) {
+          const settingsData = await settingsResponse.json();
+          if (settingsData) {
+            buttonSettings = settingsData;
+          }
+        }
       } catch (error) {
         console.error("Integration loader: Could not load button settings:", error);
       }
@@ -139,21 +151,27 @@ export async function loader({ request }) {
         shop: session.shop,
         hasActiveSubscription: data?.data?.currentAppInstallation?.activeSubscriptions?.length > 0,
         subscriptionStatus: data?.data?.currentAppInstallation?.activeSubscriptions?.[0]?.status,
-        buttonSettings
+        buttonSettings,
+        // Add a flag to indicate this is a new subscription
+        isNewSubscription: !!chargeId
       });
       
     } catch (authError) {
       // Специальная обработка ошибки аутентификации 302
-      console.error("Integration loader: Authentication error (possibly 302):", authError);
+      console.log("Integration loader: Authentication error (possibly 302):", authError);
       
       if (authError.status === 302) {
         console.log("Integration loader: Handling 302 redirect");
+        
+        // Get the redirect location from the auth error
+        const location = authError.headers?.get("Location");
         
         // Устанавливаем шоп из URL параметра
         if (shopParam) {
           return json({
             redirectToAuth: true,
             shop: shopParam,
+            location: location || "/auth/login",
             error: "Authentication required. Please log in to continue.",
             isAuthError: true
           });
@@ -198,44 +216,22 @@ export default function Integration() {
   const [buttonPosition, setButtonPosition] = useState(loaderData.buttonSettings?.buttonPosition || 'below_add_to_cart');
   const [saved, setSaved] = useState(false);
 
-  // Если есть ошибка авторизации, показываем сообщение
-  if (loaderData.isAuthError) {
-    return (
-      <Page title="Authentication Required">
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400" padding="500">
-                <Text as="h2" variant="headingLg">
-                  Authentication Required
-                </Text>
-                <Banner status="warning">
-                  {loaderData.error || "Please log in to your Shopify store to continue."}
-                </Banner>
-                <Text as="p">
-                  You need to be logged in to access this page. If you were redirected here from 
-                  a payment confirmation, your payment has been processed successfully.
-                </Text>
-                <Button
-                  primary
-                  onClick={() => {
-                    // Перенаправление на страницу логина с параметром shop
-                    let loginUrl = "/";
-                    if (loaderData.shop) {
-                      loginUrl = `/?shop=${loaderData.shop}`;
-                    }
-                    window.location.href = loginUrl;
-                  }}
-                >
-                  Log In
-                </Button>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
-    );
-  }
+  // Handle authentication errors by redirecting
+  useEffect(() => {
+    if (loaderData.isAuthError && loaderData.redirectToAuth && loaderData.shop) {
+      const redirectUrl = loaderData.location || `/auth/login?shop=${loaderData.shop}`;
+      console.log("Integration component: Redirecting to auth due to auth error:", redirectUrl);
+      window.location.href = redirectUrl;
+    }
+  }, [loaderData]);
+
+  // Show success message if coming from a new subscription
+  useEffect(() => {
+    if (loaderData.isNewSubscription) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 5000);
+    }
+  }, [loaderData.isNewSubscription]);
 
   const buttonPositionOptions = [
     {label: 'Below Add to Cart', value: 'below_add_to_cart'},
