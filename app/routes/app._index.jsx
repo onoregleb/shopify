@@ -8,8 +8,10 @@ import {
   Button,
   BlockStack,
   Box,
-  MediaCard,
-  InlineStack,
+  InlineGrid,
+  CalloutCard,
+  Banner,
+  LegacyCard,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -103,66 +105,183 @@ export default function Index() {
 
   const generateProduct = () => fetcher.submit({}, { method: "POST" });
 
+  const benefits = [
+    {
+      title: "Reduce Returns",
+      description: "Lower return rates by helping customers pick the right items the first time",
+      icon: "↺", // Exchange symbol
+      color: "#8C68CD" // Purple
+    },
+    {
+      title: "Boost Conversions",
+      description: "Increase sales by up to 40% with confidence-building try-before-you-buy experience",
+      icon: "👍", // Thumbs up symbol
+      color: "#00A0AC" // Teal
+    },
+    {
+      title: "Enhance Engagement",
+      description: "Keep customers on your site longer with interactive shopping experiences",
+      icon: "✓", // Check symbol
+      color: "#F49342" // Orange
+    },
+    {
+      title: "Data Insights",
+      description: "Gain valuable data on customer preferences and behavior",
+      icon: "📊", // Chart symbol
+      color: "#006FBB" // Blue
+    }
+  ];
+
   return (
     <Page fullWidth>
       <TitleBar title="Virtual Try-On Solution" />
       <Layout>
         <Layout.Section>
+          {/* Hero Section */}
           <Card>
-            <BlockStack gap="500">
-              <BlockStack gap="200">
-                <Text as="h1" variant="headingXl">
-                  Transform Your Shopping Experience with AI Virtual Try-On
-                </Text>
-                <Text variant="bodyLg" as="p">
-                  Elevate your store with our cutting-edge AI virtual try-on technology. Let customers see themselves in your products before they buy, increasing confidence in purchases and reducing returns.
-                </Text>
-              </BlockStack>
-              
-              <MediaCard
-                title="Key Benefits"
-                description={`
-                  • Instant virtual try-ons from a single photo
-                  • Increase conversion rates and reduce returns
-                  • Easy integration with your store
-                  • Real-time analytics and insights
-                  • Customizable try-on experience
-                `}
-                size="medium"
-              >
-                <div style={{ 
-                  width: '100%', 
-                  height: '100%',
-                  maxHeight: '400px',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
-                  <img
-                    alt="Virtual try-on preview"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      objectPosition: 'center',
-                      maxHeight: '400px'
-                    }}
-                    src="/images/virtual-tryon-demo.jpg"
-                  />
-                </div>
-              </MediaCard>
+            <div style={{ 
+              padding: '40px 20px', 
+              textAlign: 'center', 
+              background: 'linear-gradient(135deg, #f6f9fc 0%, #e9f0f7 100%)'
+            }}>
+              <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                <BlockStack gap="600">
+                  <BlockStack gap="400">
+                    <div style={{ marginBottom: '8px', fontSize: '24px' }}>
+                      📷
+                    </div>
+                    <Text as="h1" variant="heading2xl" fontWeight="bold">
+                      Transform Your Shopping Experience with AI Virtual Try-On
+                    </Text>
+                    <Text variant="headingLg" as="p" color="subdued">
+                      Let customers see themselves in your products before purchase, 
+                      boosting confidence and reducing returns
+                    </Text>
+                  </BlockStack>
+                  
+                  <div style={{ textAlign: 'center' }}>
+                    <Button 
+                      primary 
+                      size="large"
+                      onClick={() => navigate('/app/billing')}
+                    >
+                      Get Started with a 3-Day Free Trial
+                    </Button>
+                    <div style={{ 
+                      fontSize: '14px', 
+                      marginTop: '10px', 
+                      color: '#637381' 
+                    }}>
+                      No credit card required for trial
+                    </div>
+                  </div>
+                </BlockStack>
+              </div>
+            </div>
+          </Card>
+        </Layout.Section>
 
-              <Box paddingBlockEnd="800">
-                <InlineStack align="end">
+        {/* Demo Image Section */}
+        <Layout.Section>
+          <CalloutCard
+            title="See it in action"
+            illustration="https://cdn.shopify.com/s/files/1/0728/0253/4803/files/Screenshot_2023-12-13_at_21.01.36.png?v=1702497784"
+            primaryAction={{
+              content: 'Watch demo video',
+              onAction: () => {},
+            }}
+          >
+            <p>
+              Our virtual try-on technology allows customers to see how products look on them before purchasing.
+              This increases buyer confidence and reduces return rates.
+            </p>
+          </CalloutCard>
+        </Layout.Section>
+
+        {/* How It Works Banner */}
+        <Layout.Section>
+          <Banner title="How It Works" tone="info">
+            <p>Install the app, select your plan, and add the try-on button to your product pages. That's it!</p>
+          </Banner>
+        </Layout.Section>
+
+        {/* Benefits Section */}
+        <Layout.Section>
+          <Text as="h2" variant="heading2xl" fontWeight="bold" alignment="center">
+            Benefits for Your Business
+          </Text>
+          
+          <Box paddingBlockStart="500" paddingBlockEnd="500">
+            <InlineGrid columns={{ xs: 1, sm: 2 }} gap="500">
+              {benefits.map((benefit, index) => (
+                <Card key={index} padding="500">
+                  <BlockStack gap="400">
+                    <div style={{ color: benefit.color }}>
+                      {benefit.icon}
+                    </div>
+                    <Text variant="headingMd" fontWeight="semibold" as="h3">
+                      {benefit.title}
+                    </Text>
+                    <Text variant="bodyMd" as="p">
+                      {benefit.description}
+                    </Text>
+                  </BlockStack>
+                </Card>
+              ))}
+            </InlineGrid>
+          </Box>
+        </Layout.Section>
+
+        {/* Social Proof Section */}
+        <Layout.Section>
+          <LegacyCard sectioned>
+            <BlockStack gap="400">
+              <Text variant="headingLg" as="h3" alignment="center">
+                Trusted by merchants worldwide
+              </Text>
+              
+              <div style={{ 
+                backgroundColor: '#F4F6F8',
+                padding: '20px',
+                borderRadius: '8px',
+                marginTop: '10px'
+              }}>
+                <BlockStack gap="400">
+                  <Text variant="headingMd" as="p" fontWeight="medium" alignment="center" color="subdued">
+                    "After implementing the virtual try-on solution, our return rates dropped by 24% and conversion rates increased by 38%."
+                  </Text>
+                  <Text variant="bodyMd" alignment="center" color="subdued">
+                    — Sarah Johnson, Fashion Retailer
+                  </Text>
+                </BlockStack>
+              </div>
+            </BlockStack>
+          </LegacyCard>
+        </Layout.Section>
+
+        {/* CTA Section */}
+        <Layout.Section>
+          <Card>
+            <div style={{ 
+              padding: '40px 20px',
+              textAlign: 'center',
+              background: 'linear-gradient(135deg, #eaf6f9 0%, #d5e6f7 100%)'
+            }}>
+              <BlockStack gap="500">
+                <Text variant="headingXl" as="h2">
+                  Ready to transform your customer experience?
+                </Text>
+                <div>
                   <Button 
                     primary 
                     size="large"
                     onClick={() => navigate('/app/billing')}
                   >
-                    Next
+                    Choose Your Plan
                   </Button>
-                </InlineStack>
-              </Box>
-            </BlockStack>
+                </div>
+              </BlockStack>
+            </div>
           </Card>
         </Layout.Section>
       </Layout>

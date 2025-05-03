@@ -7,6 +7,7 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { handleWebhooks } from "./webhooks";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -17,6 +18,16 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.Custom,
+  webhooks: {
+    APP_UNINSTALLED: {
+      deliveryMethod: "http",
+      callbackUrl: "/webhooks",
+    },
+    APP_SUBSCRIPTIONS_UPDATE: {
+      deliveryMethod: "http",
+      callbackUrl: "/webhooks",
+    },
+  },
   future: {
     unstable_newEmbeddedAuthStrategy: false,
     v3_authenticatePublic: true,
@@ -53,4 +64,29 @@ export const getSessionByShop = async (shop) => {
   }
 
   return session;
+};
+
+// Define subscription plans
+export const SUBSCRIPTION_PLANS = {
+  TREND: {
+    name: "Trend",
+    price: "19.99", 
+    interval: "EVERY_30_DAYS",
+    trialDays: 3,
+    usageLimit: 100
+  },
+  RUNWAY: {
+    name: "Runway",
+    price: "49.99",
+    interval: "EVERY_30_DAYS",
+    trialDays: 3,
+    usageLimit: 500
+  },
+  HIGH_FASHION: {
+    name: "High Fashion",
+    price: "299.99",
+    interval: "EVERY_30_DAYS",
+    trialDays: 3,
+    usageLimit: 2000
+  }
 };

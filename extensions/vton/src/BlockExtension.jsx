@@ -12,6 +12,7 @@ import {
   Badge,
   Box,
   Image,
+  Select,
 } from '@shopify/ui-extensions-react/admin';
 import { useState, useEffect } from 'react';
 
@@ -32,7 +33,7 @@ function App() {
 
   useEffect(() => {
     checkSubscriptionStatus();
-    loadProductSettings();
+    loadButtonSettings();
   }, []);
 
   const showNotification = (message, status = 'info') => {
@@ -55,16 +56,39 @@ function App() {
     }
   };
 
-  const loadProductSettings = async () => {
+  const loadButtonSettings = async () => {
     try {
-      const savedSettings = await storage.get('vtonSettings');
-      const enabled = await storage.get('virtualTryOnEnabled');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+      setIsLoading(true);
+      // Fetch settings from API
+      const response = await fetch('/api/button-settings', {
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to load settings');
       }
-      setIsEnabled(!!enabled);
+      
+      const data = await response.json();
+      setSettings({
+        buttonText: data.buttonText || 'Try On Virtually',
+        buttonPosition: data.buttonPosition || 'below_add_to_cart'
+      });
+      setIsEnabled(data.isEnabled);
     } catch (error) {
       console.error('Error loading settings:', error);
+      // Fall back to local storage if API fails
+      try {
+        const savedSettings = await storage.get('vtonSettings');
+        const enabled = await storage.get('virtualTryOnEnabled');
+        if (savedSettings) {
+          setSettings(JSON.parse(savedSettings));
+        }
+        setIsEnabled(!!enabled);
+      } catch (storageError) {
+        console.error('Error loading from storage:', storageError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -77,9 +101,30 @@ function App() {
     }
 
     try {
-      await storage.set('virtualTryOnEnabled', !isEnabled);
+      const newEnabledState = !isEnabled;
+      
+      // Update API
+      const response = await fetch('/api/button-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({
+          ...settings,
+          isEnabled: newEnabledState
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update settings');
+      }
+      
+      // Also update local storage as fallback
+      await storage.set('virtualTryOnEnabled', newEnabledState);
       await storage.set('vtonSettings', JSON.stringify(settings));
-      setIsEnabled(!isEnabled);
+      
+      setIsEnabled(newEnabledState);
       showNotification(i18n.translate(isEnabled ? 'disabled_message' : 'success_message'), 'success');
     } catch (error) {
       console.error('Error toggling Virtual Try-On:', error);
@@ -87,12 +132,81 @@ function App() {
     }
   };
 
-  const handleSettingChange = (key, value) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
+  // New method to track usage when a customer uses the try-on feature
+  const trackTryOnUsage = async (productId) => {
+    try {
+      const response = await fetch('/api/usage-tracker', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({
+          productId
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Usage tracking error:', errorData);
+      }
+    } catch (error) {
+      console.error('Error tracking usage:', error);
+    }
   };
+  
+  // Method to simulate a customer using the try-on feature (for demo purposes)
+  const handleTryOnClick = async () => {
+    // Get the current product ID from data
+    const productId = data?.product?.id;
+    
+    if (!productId) {
+      showNotification('Could not identify product', 'warning');
+      return;
+    }
+    
+    // Track the usage
+    await trackTryOnUsage(productId);
+    
+    // Show a success notification
+    showNotification('Virtual Try-On experience launched!', 'success');
+  };
+
+  const handleSettingChange = async (key, value) => {
+    const newSettings = {
+      ...settings,
+      [key]: value
+    };
+    
+    setSettings(newSettings);
+    
+    try {
+      // Update API
+      await fetch('/api/button-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({
+          ...newSettings,
+          isEnabled
+        })
+      });
+      
+      // Update local storage as fallback
+      await storage.set('vtonSettings', JSON.stringify(newSettings));
+      showNotification('Settings updated', 'success');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+
+  const buttonPositionOptions = [
+    {label: 'Below Add to Cart', value: 'below_add_to_cart'},
+    {label: 'Above Add to Cart', value: 'above_add_to_cart'},
+    {label: 'In Product Description', value: 'product_description'}
+  ];
 
   return (
     <AdminBlock title={i18n.translate('title')}>
@@ -127,15 +241,12 @@ function App() {
                 value={settings.buttonText}
                 onChange={(value) => handleSettingChange('buttonText', value)}
               />
-              <select
-                value={settings.buttonPosition}
-                onChange={(e) => handleSettingChange('buttonPosition', e.target.value)}
-                style={{padding: '8px', width: '100%'}}
-              >
-                <option value="below_add_to_cart">Below Add to Cart</option>
-                <option value="above_add_to_cart">Above Add to Cart</option>
-                <option value="product_description">In Product Description</option>
-              </select>
+              <Select
+                label="Button Position"
+                options={buttonPositionOptions}
+                selected={settings.buttonPosition}
+                onChange={(value) => handleSettingChange('buttonPosition', value)}
+              />
             </BlockStack>
           </Box>
         )}
@@ -154,7 +265,8 @@ function App() {
               <Button
                 variant="secondary"
                 icon={<Icon source="camera" />}
-                disabled
+                disabled={false}
+                onPress={handleTryOnClick}
               >
                 {settings.buttonText}
               </Button>

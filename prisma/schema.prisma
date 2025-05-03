@@ -42,3 +42,27 @@ model Subscription {
   sessionId      String               // внешний ключ к Session.id
   session        Session   @relation(fields: [sessionId], references: [id])
 }
+
+model TryOnUsage {
+  id             String   @id @default(cuid())
+  shop           String
+  productId      String
+  timestamp      DateTime @default(now())
+  subscriptionId String
+  
+  @@index([shop, timestamp])
+  @@map("try_on_usage")
+}
+
+model SubscriptionEvent {
+  id             String   @id @default(cuid())
+  shop           String
+  subscriptionId String
+  event          String   // "created", "cancelled", "renewed", "failed", etc.
+  status         String
+  timestamp      DateTime @default(now())
+  
+  @@index([shop, timestamp])
+  @@index([subscriptionId])
+  @@map("subscription_events")
+}

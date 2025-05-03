@@ -2,104 +2,153 @@
 
 import { getSessionByShop } from "../shopify.server";
 import { PrismaClient } from "@prisma/client";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 
 const prisma = new PrismaClient();
 
 export const loader = async ({ request }) => {
-  console.log("Billing Callback: Starting callback processing");
+  console.log("Billing Callback: Starting callback processing with URL", request.url);
 
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   const chargeId = url.searchParams.get("charge_id");
 
+  console.log("Billing Callback: Parameters:", { shop, chargeId });
+
   if (!shop || !chargeId) {
-    console.error("Missing required parameters", { shop, charge_id: chargeId });
+    console.error("Billing Callback: Missing required parameters", { shop, chargeId });
     return new Response(
       `<html><body><script>window.close();</script></body></html>`,
       { headers: { "Content-Type": "text/html" } }
     );
   }
 
-  // 1. Получаем сессию и токен
-  const session = await getSessionByShop(shop);
-  if (!session?.accessToken) {
-    console.error("Session or accessToken not found for shop:", shop);
-    return new Response(
-      `<html><body><script>window.close();</script></body></html>`,
-      { headers: { "Content-Type": "text/html" } }
-    );
-  }
-  const accessToken = session.accessToken;
+  try {
+    // 1. Получаем сессию и токен
+    console.log("Billing Callback: Getting session for shop", shop);
+    const session = await getSessionByShop(shop);
+    
+    if (!session?.accessToken) {
+      console.error("Billing Callback: Session or accessToken not found for shop:", shop);
+      return new Response(
+        `<html><body>
+          <h2>Authentication Error</h2>
+          <p>Unable to find session for shop: ${shop}</p>
+          <p>Please <a href="/?shop=${shop}">login again</a>.</p>
+          <script>
+            setTimeout(function() {
+              window.location.href = "/?shop=${shop}";
+            }, 3000);
+          </script>
+        </body></html>`,
+        { headers: { "Content-Type": "text/html" } }
+      );
+    }
+    
+    console.log("Billing Callback: Successfully retrieved session with accessToken");
+    const accessToken = session.accessToken;
 
-  // 2. Запрашиваем статус подписки у Shopify
-  const subscriptionGID = `gid://shopify/AppSubscription/${chargeId}`;
-  const graphqlUrl = `https://${shop}/admin/api/2024-07/graphql.json`;
-  const query = `
-    query getSubscription($id: ID!) {
-      node(id: $id) {
-        ... on AppSubscription {
-          id
-          status
-          name
-          test
+    // 2. Запрашиваем статус подписки у Shopify
+    const subscriptionGID = `gid://shopify/AppSubscription/${chargeId}`;
+    const graphqlUrl = `https://${shop}/admin/api/2024-07/graphql.json`;
+    
+    console.log("Billing Callback: Querying subscription status from Shopify", { subscriptionGID, graphqlUrl });
+    
+    const query = `
+      query getSubscription($id: ID!) {
+        node(id: $id) {
+          ... on AppSubscription {
+            id
+            status
+            name
+            test
+          }
         }
       }
-    }
-  `;
-  const resp = await fetch(graphqlUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": accessToken,
-    },
-    body: JSON.stringify({ query, variables: { id: subscriptionGID } }),
-  });
-  const { data, errors } = await resp.json();
-
-  if (errors || data.node?.status !== "ACTIVE") {
-    console.warn("Subscription not active or GraphQL error:", errors);
-    // Можно здесь послать parent на страницу ошибки, но продолжаем дальше
-  }
-
-  // 3. Сохраняем или обновляем запись в БД
-  try {
-    await prisma.subscription.upsert({
-      where: { chargeId: chargeId },       // уникальный фильтр по GID :contentReference[oaicite:2]{index=2}
-      update: {
-        status: data.node.status,          // обновляем текущий статус :contentReference[oaicite:3]{index=3}
+    `;
+    const resp = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
       },
-      create: {
-        chargeId: chargeId,                // GID подписки
-        status: data.node.status,          // статус (ACTIVE, etc.)
-        name: data.node.name,              // имя плана
-        test: data.node.test,              // флаг тестовой подписки
-        shop: shop,                        // домен магазина для удобных запросов
-        sessionId: session.id,             // связь с Session
-      },
+      body: JSON.stringify({ query, variables: { id: subscriptionGID } }),
     });
-    console.log("Subscription record upserted in database");
-  } catch (dbError) {
-    console.error("Failed to upsert subscription record:", dbError);
-    // здесь можно уведомить parent или залогировать, но всё равно закрываем окно
-  }
+    
+    const { data, errors } = await resp.json();
+    console.log("Billing Callback: Subscription query result:", { data, errors });
 
-  // 4. Возвращаем HTML со скриптом: обновляем родительское окно и закрываем текущее
-  return new Response(
-    `
-    <html>
-      <body>
-        <script>
-          if (window.opener && !window.opener.closed) {
-            window.opener.location.href = "/app/next-step";
-          }
-          window.close();
-        </script>
-      </body>
-    </html>
-    `,
-    {
-      headers: { "Content-Type": "text/html" },
+    if (errors || data.node?.status !== "ACTIVE") {
+      console.warn("Billing Callback: Subscription not active or GraphQL error:", errors);
     }
-  );
+
+    // 3. Сохраняем или обновляем запись в БД
+    try {
+      console.log("Billing Callback: Upserting subscription record in database");
+      await prisma.subscription.upsert({
+        where: { chargeId: chargeId },
+        update: {
+          status: data.node.status,
+        },
+        create: {
+          chargeId: chargeId,
+          status: data.node.status,
+          name: data.node.name,
+          test: data.node.test,
+          shop: shop,
+          sessionId: session.id,
+        },
+      });
+      console.log("Billing Callback: Subscription record successfully upserted in database");
+    } catch (dbError) {
+      console.error("Billing Callback: Failed to upsert subscription record:", dbError);
+    }
+
+    // 4. Возвращаем HTML со скриптом: обновляем родительское окно и закрываем текущее
+    // Используем тот же подход, что и при переходе на страницу оплаты
+    const baseUrl = process.env.SHOPIFY_APP_URL || url.origin;
+    const redirectUrl = new URL("/app/integration", baseUrl);
+    redirectUrl.searchParams.set("shop", shop);
+    
+    console.log("Billing Callback: Setting redirect URL with shop parameter:", redirectUrl.toString());
+    
+    // Если есть открывшее окно, перенаправляем его, иначе закрываем текущее
+    return new Response(
+      `
+      <html>
+        <body>
+          <h2>Processing your subscription...</h2>
+          <p>Your payment has been confirmed. You'll be redirected to complete setup.</p>
+          <script>
+            console.log("Redirect URL: ${redirectUrl.toString()}");
+            setTimeout(function() {
+              if (window.opener && !window.opener.closed) {
+                console.log("Redirecting opener window to: ${redirectUrl.toString()}");
+                window.opener.location.href = "${redirectUrl.toString()}";
+                window.close();
+              } else {
+                console.log("No opener window, redirecting current window to: ${redirectUrl.toString()}");
+                window.location.href = "${redirectUrl.toString()}";
+              }
+            }, 2000);
+          </script>
+        </body>
+      </html>
+      `,
+      {
+        headers: { "Content-Type": "text/html" },
+      }
+    );
+  } catch (error) {
+    console.error("Billing Callback: Error processing billing callback:", error.stack || error);
+    return new Response(
+      `<html><body>
+        <h2>Error processing your subscription</h2>
+        <p>Please try again or contact support.</p>
+        <p>Error details: ${error.message || 'Unknown error'}</p>
+        <p><a href="/?shop=${shop}">Return to app</a></p>
+      </body></html>`,
+      { headers: { "Content-Type": "text/html" } }
+    );
+  }
 };

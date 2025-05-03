@@ -1,6 +1,6 @@
 import { json } from "@remix-run/node";
 import { useNavigate, useSubmit, useActionData, useLoaderData } from "@remix-run/react";
-import { Page, Layout, Card, BlockStack, Text, InlineGrid, Button, List, Banner, Loading, Modal } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, InlineGrid, Button, List, Banner, Loading, Modal, Box } from "@shopify/polaris";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -9,6 +9,7 @@ const PLANS = [
   {
     name: "Trend",
     price: "19.99",
+    subtitle: "For small businesses starting out",
     features: [
       "100 Try Ons per month",
       "Basic analytics",
@@ -17,10 +18,15 @@ const PLANS = [
     ],
     type: "RECURRING_BILL",
     interval: "EVERY_30_DAYS",
+    trialDays: 3,
+    usageLimit: 100,
+    color: "#AEC9EB", // Light blue
+    recommended: false
   },
   {
     name: "Runway",
     price: "49.99",
+    subtitle: "Our most popular plan",
     features: [
       "500 Try Ons per month",
       "Advanced analytics",
@@ -29,10 +35,15 @@ const PLANS = [
     ],
     type: "RECURRING_BILL",
     interval: "EVERY_30_DAYS",
+    trialDays: 3,
+    usageLimit: 500,
+    color: "#008060", // Shopify green
+    recommended: true
   },
   {
     name: "High Fashion",
     price: "299.99",
+    subtitle: "For enterprise needs",
     features: [
       "2000 Try Ons per month",
       "Premium analytics",
@@ -42,6 +53,10 @@ const PLANS = [
     ],
     type: "RECURRING_BILL",
     interval: "EVERY_30_DAYS",
+    trialDays: 3,
+    usageLimit: 2000,
+    color: "#5C6AC4", // Shopify purple
+    recommended: false
   },
 ];
 
@@ -111,12 +126,13 @@ export async function action({ request }) {
   try {
     const response = await admin.graphql(
       `#graphql
-        mutation createSubscription($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean!) {
+        mutation createSubscription($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean!, $trialDays: Int) {
           appSubscriptionCreate(
             name: $name
             lineItems: $lineItems
             returnUrl: $returnUrl
             test: $test
+            trialDays: $trialDays
           ) {
             appSubscription {
               id
@@ -144,7 +160,8 @@ export async function action({ request }) {
             },
           ],
           returnUrl,
-          test: true
+          test: true,
+          trialDays: plan.trialDays
         },
       }
     );
@@ -191,12 +208,14 @@ export default function Billing() {
   const loaderData = useLoaderData();
   const [isLoading, setIsLoading] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [loadingPlanIndex, setLoadingPlanIndex] = useState(null);
   const app = useAppBridge();
 
   useEffect(() => {
     if (actionData?.error) {
       console.log('Billing component: Error detected', actionData.error);
       setIsLoading(false);
+      setLoadingPlanIndex(null);
       return;
     }
 
@@ -208,14 +227,21 @@ export default function Billing() {
         console.log('Billing component: Attempting redirect to:', actionData.confirmationUrl);
         
         try {
-          const popupWindow = window.open(actionData.confirmationUrl, '_blank');
+          // Make sure the URL includes the shop parameter
+          let confirmationUrl = actionData.confirmationUrl;
+          if (!confirmationUrl.includes('shop=')) {
+            const separator = confirmationUrl.includes('?') ? '&' : '?';
+            confirmationUrl = `${confirmationUrl}${separator}shop=${actionData.shop}`;
+          }
+          
+          const popupWindow = window.open(confirmationUrl, '_blank');
           
           if (popupWindow) {
             console.log('Billing component: Opened in new window');
             setShowAuthModal(false);
           } else {
             console.log('Billing component: Popup blocked, trying direct navigation');
-            window.location.href = actionData.confirmationUrl;
+            window.location.href = confirmationUrl;
           }
         } catch (error) {
           console.error('Billing component: Redirect failed:', error);
@@ -230,13 +256,16 @@ export default function Billing() {
 
   const handleSubscribe = (planIndex) => {
     setIsLoading(true);
+    setLoadingPlanIndex(planIndex);
     submit({ planIndex }, { method: "POST" });
   };
 
   return (
     <Page
       title="Choose Your Plan"
+      titleMetadata={<Text variant="bodyMd" as="span" color="subdued">All plans include a 3-day free trial</Text>}
       backAction={{ content: "Back", onAction: () => navigate("/app") }}
+      divider
     >
       <Layout>
         <Layout.Section>
@@ -244,21 +273,21 @@ export default function Billing() {
           
           <Modal
             open={showAuthModal}
-            title="Переход к оплате"
+            title="Proceeding to Payment"
             onClose={() => setShowAuthModal(false)}
           >
             <Modal.Section>
               <BlockStack gap="400">
                 <Text as="p">
-                  Сейчас откроется страница оплаты Shopify в новом окне. 
-                  Если окно не открылось автоматически, нажмите кнопку ниже.
+                  Shopify's payment page will open in a new window.
+                  If it doesn't open automatically, please click the button below.
                 </Text>
                 {actionData?.confirmationUrl && (
                   <Button
                     primary
                     onClick={() => window.open(actionData.confirmationUrl, '_blank')}
                   >
-                    Открыть страницу оплаты
+                    Open Payment Page
                   </Button>
                 )}
                 <Loading />
@@ -266,47 +295,137 @@ export default function Billing() {
             </Modal.Section>
           </Modal>
 
-          <BlockStack gap="500">
+          <BlockStack gap="800">
             {actionData?.error && (
               <Banner status="critical">
                 {actionData.error}
               </Banner>
             )}
 
-            <Text as="h2" variant="headingXl">
-              Select a plan that fits your business
-            </Text>
+            <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto', padding: '20px 0' }}>
+              <Text as="h2" variant="heading2xl" fontWeight="bold">
+                Choose the Right Plan for Your Business
+              </Text>
+              <Box paddingBlockStart="400">
+                <Text as="p" variant="bodyLg" color="subdued">
+                  Select a plan that matches your needs. All plans include a 3-day free trial,
+                  and you can upgrade or downgrade at any time.
+                </Text>
+              </Box>
+            </div>
             
-            <InlineGrid columns={3} gap="500">
+            <InlineGrid columns={{ xs: 1, md: 3 }} gap="500">
               {PLANS.map((plan, index) => (
-                <Card key={plan.name}>
-                  <BlockStack gap="400">
-                    <BlockStack gap="200">
-                      <Text as="h3" variant="headingLg">
-                        {plan.name}
-                      </Text>
-                      <Text as="p" variant="headingXl">
-                        ${plan.price}
-                        <Text as="span" variant="bodySm" color="subdued">
-                          /month
+                <div key={plan.name} style={{ height: '100%' }}>
+                  <Card 
+                    padding="500"
+                    style={{ 
+                      height: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      position: 'relative',
+                      border: plan.recommended ? `2px solid ${plan.color}` : undefined,
+                      boxShadow: plan.recommended ? '0 4px 16px rgba(0, 0, 0, 0.08)' : undefined,
+                      minHeight: '800px'
+                    }}
+                  >
+                    {plan.recommended && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '-12px', 
+                        left: '50%', 
+                        transform: 'translateX(-50%)',
+                        backgroundColor: plan.color,
+                        color: 'white',
+                        padding: '4px 12px',
+                        borderRadius: '16px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)'
+                      }}>
+                        MOST POPULAR
+                      </div>
+                    )}
+                    <BlockStack gap="600" style={{ height: '100%' }}>
+                      <BlockStack gap="400">
+                        <Text as="h3" variant="headingLg" alignment="center">
+                          {plan.name}
                         </Text>
-                      </Text>
+                        <Text variant="bodyMd" color="subdued" alignment="center">
+                          {plan.subtitle}
+                        </Text>
+                        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                          <Text as="p" variant="heading2xl" fontWeight="bold">
+                            ${plan.price}
+                            <Text as="span" variant="bodyMd" color="subdued">
+                              /month
+                            </Text>
+                          </Text>
+                        </div>
+                      </BlockStack>
+                      
+                      <div style={{ 
+                        height: '1px', 
+                        background: 'rgba(0, 0, 0, 0.07)', 
+                        width: '100%' 
+                      }}></div>
+                      
+                      <div style={{ flex: 1, padding: '20px 0' }}>
+                        <BlockStack gap="600">
+                          {plan.features.map((feature) => (
+                            <div key={feature} style={{ 
+                              display: 'flex', 
+                              alignItems: 'flex-start', 
+                              gap: '15px',
+                              marginBottom: '15px'
+                            }}>
+                              <div style={{ 
+                                color: plan.color, 
+                                fontWeight: 'bold', 
+                                fontSize: '22px',
+                                minWidth: '30px',
+                                marginTop: '2px'
+                              }}>
+                                ✓
+                              </div>
+                              <div style={{ 
+                                color: '#202223', 
+                                fontWeight: 'medium', 
+                                fontSize: '16px',
+                                lineHeight: '24px'
+                              }}>
+                                {feature}
+                              </div>
+                            </div>
+                          ))}
+                        </BlockStack>
+                      </div>
+                      
+                      <div style={{ marginTop: 'auto' }}>
+                        <Button
+                          primary={plan.recommended}
+                          onClick={() => handleSubscribe(index)}
+                          loading={isLoading && loadingPlanIndex === index}
+                          fullWidth
+                          size="large"
+                        >
+                          {isLoading && loadingPlanIndex === index ? 
+                            "Processing..." : 
+                            `Choose ${plan.name}`
+                          }
+                        </Button>
+                        <div style={{ 
+                          textAlign: 'center', 
+                          fontSize: '12px', 
+                          color: '#637381',
+                          marginTop: '8px' 
+                        }}>
+                          3-day free trial, then ${plan.price}/month
+                        </div>
+                      </div>
                     </BlockStack>
-                    <List>
-                      {plan.features.map((feature) => (
-                        <List.Item key={feature}>{feature}</List.Item>
-                      ))}
-                    </List>
-                    <Button
-                      primary={index === 1}
-                      onClick={() => handleSubscribe(index)}
-                      loading={isLoading}
-                      fullWidth
-                    >
-                      Choose {plan.name}
-                    </Button>
-                  </BlockStack>
-                </Card>
+                  </Card>
+                </div>
               ))}
             </InlineGrid>
           </BlockStack>
