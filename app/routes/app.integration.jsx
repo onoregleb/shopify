@@ -304,59 +304,49 @@ export default function Integration() {
                       background="bg-surface"
                     >
                       <BlockStack gap="300">
-                        <Text variant="headingMd">Try-On Button Settings</Text>
-                        <TextField
-                          label="Button Text"
-                          name="buttonText"
-                          value={buttonText}
-                          onChange={setButtonText}
-                        />
-                        <Select
-                          label="Button Position"
-                          name="buttonPosition"
-                          options={buttonPositionOptions}
-                          value={buttonPosition}
-                          onChange={setButtonPosition}
-                        />
-                      </BlockStack>
-                    </Box>
-                    
-                    <Box
-                      padding="400"
-                      borderWidth="025"
-                      borderRadius="200"
-                      borderColor="border"
-                      background="bg-surface"
-                    >
-                      <BlockStack gap="300">
-                        <Text variant="headingMd">Preview</Text>
-                        <img 
-                          src="https://cdn.shopify.com/shopifycloud/shopify_app/assets/default-banner-image.jpg" 
-                          alt="Preview"
-                          style={{width: '100%', borderRadius: '8px'}}
-                        />
-                        {buttonPosition && (
+                        <Text variant="headingMd">Theme App Extension</Text>
+                        <Text variant="bodyMd">
+                          To display the Virtual Try-On button on your product pages, you need to activate our Theme App Extension:
+                        </Text>
+                        <List type="number">
+                          <List.Item>
+                            Go to your Shopify admin → <strong>Online Store</strong> → <strong>Themes</strong>
+                          </List.Item>
+                          <List.Item>
+                            Click <strong>Customize</strong> on your active theme
+                          </List.Item>
+                          <List.Item>
+                            In the theme editor, click on <strong>Theme settings</strong> (bottom left corner)
+                          </List.Item>
+                          <List.Item>
+                            Select <strong>App embeds</strong>
+                          </List.Item>
+                          <List.Item>
+                            Find the <strong>Virtual Try-On Button</strong> and toggle it ON
+                          </List.Item>
+                          <List.Item>
+                            Customize the button settings (position, colors, etc.)
+                          </List.Item>
+                          <List.Item>
+                            Click <strong>Save</strong> to activate
+                          </List.Item>
+                        </List>
+                        <Box paddingBlockStart="300">
                           <Button
-                            variant="secondary"
-                            disabled
+                            onClick={() => {
+                              const shop = loaderData.shop;
+                              // This is a placeholder URL - in real implementation, you would need to fetch the theme ID
+                              const url = `https://${shop}/admin/themes/current/editor?context=apps-embed-blocks&activate=virtual-try-on-button`;
+                              window.open(url, '_blank');
+                            }}
                           >
-                            <InlineStack gap="200" align="center">
-                              <Icon source="camera" />
-                              <span>{buttonText || 'Try On Virtually'}</span>
-                            </InlineStack>
+                            Open Theme Editor
                           </Button>
-                        )}
+                        </Box>
                       </BlockStack>
                     </Box>
                     
                     <BlockStack gap="300">
-                      <Button
-                        primary
-                        submit
-                        loading={isConfiguring}
-                      >
-                        Save Button Settings
-                      </Button>
                       <Button
                         onClick={handleComplete}
                       >

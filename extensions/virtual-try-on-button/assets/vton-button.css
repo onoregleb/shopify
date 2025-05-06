@@ -1,0 +1,41 @@
+#vton-button {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+#vton-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+#vton-button:active {
+  transform: scale(0.98);
+}
+
+#vton-modal {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#vton-content {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  #vton-button {
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+  }
+  
+  #vton-modal .modal-content {
+    width: 95% !important;
+    margin: 10% auto !important;
+  }
+} 

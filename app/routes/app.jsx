@@ -111,6 +111,23 @@ export default function App() {
     isAdminRedirect
   });
 
+  // Handle billing-related redirects from Shopify Admin
+  useEffect(() => {
+    // Listen for messages from the billing callback window
+    function handleMessage(event) {
+      // Verify the message source and type
+      if (event.data && event.data.type === "BILLING_COMPLETED") {
+        console.log("Received billing completed message:", event.data);
+        if (event.data.url) {
+          window.location.href = event.data.url;
+        }
+      }
+    }
+    
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   // If this is a redirect from Shopify Admin after billing confirmation
   useEffect(() => {
     if (isAdminRedirect && shop && targetLocation) {
@@ -172,7 +189,7 @@ export default function App() {
 
   return (
     <AppProvider 
-      isEmbeddedApp
+      isEmbeddedApp={true} // Always treat as embedded app for consistency
       apiKey={apiKey}
       shop={shop}
       host={host}

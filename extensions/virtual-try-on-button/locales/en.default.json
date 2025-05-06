@@ -1,0 +1,7 @@
+{
+  "virtual_try_on": {
+    "button_label": "Try On Virtually",
+    "loading": "Loading...",
+    "error": "Error loading virtual try-on"
+  }
+} 
