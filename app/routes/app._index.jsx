@@ -167,13 +167,6 @@ export default function Index() {
                     >
                       Get Started with a 3-Day Free Trial
                     </Button>
-                    <div style={{ 
-                      fontSize: '14px', 
-                      marginTop: '10px', 
-                      color: '#637381' 
-                    }}>
-                      No credit card required for trial
-                    </div>
                   </div>
                 </BlockStack>
               </div>
@@ -230,33 +223,6 @@ export default function Index() {
               ))}
             </InlineGrid>
           </Box>
-        </Layout.Section>
-
-        {/* Social Proof Section */}
-        <Layout.Section>
-          <LegacyCard sectioned>
-            <BlockStack gap="400">
-              <Text variant="headingLg" as="h3" alignment="center">
-                Trusted by merchants worldwide
-              </Text>
-              
-              <div style={{ 
-                backgroundColor: '#F4F6F8',
-                padding: '20px',
-                borderRadius: '8px',
-                marginTop: '10px'
-              }}>
-                <BlockStack gap="400">
-                  <Text variant="headingMd" as="p" fontWeight="medium" alignment="center" color="subdued">
-                    "After implementing the virtual try-on solution, our return rates dropped by 24% and conversion rates increased by 38%."
-                  </Text>
-                  <Text variant="bodyMd" alignment="center" color="subdued">
-                    — Sarah Johnson, Fashion Retailer
-                  </Text>
-                </BlockStack>
-              </div>
-            </BlockStack>
-          </LegacyCard>
         </Layout.Section>
 
         {/* CTA Section */}
