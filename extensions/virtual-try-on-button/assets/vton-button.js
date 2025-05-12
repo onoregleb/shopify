@@ -9,7 +9,31 @@
   // Get current product ID
   let productId = null;
   try {
-    productId = meta.product?.id?.split('/').pop();
+    // Try multiple methods to get the product ID
+    // Method 1: Check if window.meta is available
+    if (window.meta && window.meta.product) {
+      productId = window.meta.product.id?.split('/').pop();
+    }
+    
+    // Method 2: Try ShopifyAnalytics.meta
+    if (!productId && window.ShopifyAnalytics && window.ShopifyAnalytics.meta) {
+      productId = window.ShopifyAnalytics.meta.product?.id;
+    }
+    
+    // Method 3: Look for product JSON in the DOM
+    if (!productId) {
+      const productJsonScript = document.querySelector('script[type="application/json"][data-product-json]');
+      if (productJsonScript) {
+        try {
+          const productData = JSON.parse(productJsonScript.textContent);
+          productId = productData.id;
+        } catch (e) {
+          console.log('Error parsing product JSON', e);
+        }
+      }
+    }
+    
+    // Method 4: Extract from form
     if (!productId) {
       const productForm = document.querySelector('form[action*="/cart/add"]');
       if (productForm) {
@@ -17,6 +41,19 @@
         if (idInput) {
           productId = idInput.value;
         }
+      }
+    }
+    
+    // Method 5: Extract from URL if all else fails
+    if (!productId) {
+      const pathParts = window.location.pathname.split('/');
+      const productsIndex = pathParts.indexOf('products');
+      if (productsIndex >= 0 && pathParts.length > productsIndex + 1) {
+        // This gives us the handle, not the ID, but it's better than nothing
+        const handle = pathParts[productsIndex + 1];
+        console.log('Using product handle from URL:', handle);
+        // We'll use the handle as a fallback
+        productId = handle;
       }
     }
   } catch (error) {

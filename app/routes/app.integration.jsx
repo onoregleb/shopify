@@ -17,6 +17,7 @@ import {
   Icon,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import { fetchButtonSettings } from "../utils/settings.server";
 
 export async function loader({ request }) {
   console.log("Integration loader: Starting with URL", request.url);
@@ -129,18 +130,15 @@ export async function loader({ request }) {
       
       try {
         // Try to load settings from the API
-        const settingsResponse = await fetch(`${process.env.SHOPIFY_APP_URL || ''}/api/button-settings`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.accessToken}`
-          }
-        });
+        let settingsUrl = `${process.env.SHOPIFY_APP_URL || ''}/api/button-settings`;
+        console.log("Integration loader: Fetching button settings from:", settingsUrl);
         
-        if (settingsResponse.ok) {
-          const settingsData = await settingsResponse.json();
-          if (settingsData) {
-            buttonSettings = settingsData;
-          }
+        // Use the server-side utility to fetch settings
+        const settingsData = await fetchButtonSettings(settingsUrl, session.accessToken);
+        
+        if (settingsData) {
+          buttonSettings = settingsData;
+          console.log("Integration loader: Successfully loaded button settings");
         }
       } catch (error) {
         console.error("Integration loader: Could not load button settings:", error);
