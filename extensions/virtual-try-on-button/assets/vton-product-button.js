@@ -32,36 +32,97 @@
   // Get button settings from the app block
   const buttonSettings = {
     text: "{{ block.settings.button_text }}",
+    useThemeColor: "{{ block.settings.use_theme_color }}" === "true",
     buttonColor: "{{ block.settings.button_color }}",
     textColor: "{{ block.settings.text_color }}"
   };
 
+  // Detect theme accent color
+  function getThemeColor() {
+    // Try to find theme accent color from CSS variables
+    const themeAccentColor = getComputedStyle(document.documentElement).getPropertyValue('--color-accent') ||
+                             getComputedStyle(document.documentElement).getPropertyValue('--color-primary') ||
+                             getComputedStyle(document.documentElement).getPropertyValue('--color-button') ||
+                             getComputedStyle(document.documentElement).getPropertyValue('--color-button-primary') ||
+                             getComputedStyle(document.documentElement).getPropertyValue('--color-link') ||
+                             '#008060'; // Default Shopify green as fallback
+    return themeAccentColor.trim();
+  }
+
   // Create try-on button
   function createTryOnButton() {
-    // First, find the product form or Add to Cart button container
-    const productForm = document.querySelector('form[action*="/cart/add"]');
-    if (!productForm) {
-      console.error("Could not find product form");
-      return;
-    }
+    // Use a wider set of selectors to find the buy button area
+    const buyButtonSelectors = [
+      // Form selectors
+      'form[action*="/cart/add"]',
+      // Common button container selectors across various themes
+      '.product-form__buttons',
+      '.product-form__controls-group--submit',
+      '.product__actions',
+      '.product-form__submit-container',
+      '.product-form__payment-container',
+      '.product-single__purchase-options',
+      '.product-single__add-to-cart',
+      '.add-to-cart-wrapper',
+      '.product-form__submit',
+      // Dawn theme and similar
+      'product-form[data-type="add-to-cart-form"]',
+      // Fallback to main product area
+      '.product__info-container',
+      '.product__meta',
+      '.product-single__meta',
+      '[data-product-information]'
+    ];
 
-    // Look for common containers for buy buttons in most themes
-    const buyButtonContainer = 
-      productForm.querySelector('.product__actions') || 
-      productForm.querySelector('.product-form__buttons') ||
-      productForm.querySelector('.product-form__submit-container') || 
-      productForm.querySelector('.product-form__payment-container') ||
-      document.querySelector('.product-form__buttons');
+    // Try each selector until we find a match
+    let buyButtonContainer = null;
+    for (const selector of buyButtonSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        buyButtonContainer = element;
+        console.log("Found buy button container with selector:", selector);
+        break;
+      }
+    }
 
     if (!buyButtonContainer) {
-      console.error("Could not find button container");
-      // If container not found, insert after the form itself
-      insertButton(productForm, false);
+      console.error("Could not find buy button container, fallback to appending to product form");
+      const productForm = document.querySelector('form[action*="/cart/add"]');
+      if (productForm) {
+        insertButton(productForm, false);
+      } else {
+        console.error("Could not find product form either, aborting");
+      }
       return;
     }
 
-    // Insert after the buy button container
-    insertButton(buyButtonContainer, true);
+    // Try to find the payment buttons section which usually comes after the add to cart button
+    const paymentButtons = buyButtonContainer.querySelector('.shopify-payment-button, .product-form__payment-container');
+    
+    if (paymentButtons) {
+      // Insert after payment buttons
+      insertButton(paymentButtons, false);
+    } else {
+      // Find the main buy button
+      const addToCartButton = buyButtonContainer.querySelector('button[name="add"], button.add-to-cart, button[data-add-to-cart], .product-form__cart-submit, [data-testid="Checkout-button"]');
+      
+      if (addToCartButton) {
+        // If there's a direct button, insert after its parent container
+        const buttonContainer = addToCartButton.closest('.shopify-payment-button, .product-form__buttons, .add-to-cart, .product-form__submit');
+        if (buttonContainer) {
+          insertButton(buttonContainer, false);
+        } else {
+          // Insert after the button itself
+          insertButton(addToCartButton, false);
+        }
+      } else {
+        // If no specific elements found, append to the end of the container
+        insertButton(buyButtonContainer, true);
+      }
+    }
+    
+    // Log success
+    console.log("Successfully added Product Try-On button");
   }
 
   function insertButton(container, insertInside) {
@@ -69,13 +130,20 @@
     const buttonWrapper = document.createElement('div');
     buttonWrapper.className = 'vton-button-wrapper';
     buttonWrapper.style.marginTop = '10px';
+    buttonWrapper.style.marginBottom = '10px';
     buttonWrapper.style.width = '100%';
+
+    // Get the button color, either from theme or settings
+    let buttonColor = buttonSettings.buttonColor;
+    if (buttonSettings.useThemeColor) {
+      buttonColor = getThemeColor();
+    }
 
     // Create the button
     const button = document.createElement('button');
     button.id = 'vton-product-button';
     button.textContent = buttonSettings.text;
-    button.style.backgroundColor = buttonSettings.buttonColor;
+    button.style.backgroundColor = buttonColor;
     button.style.color = buttonSettings.textColor;
     button.style.padding = '12px 20px';
     button.style.borderRadius = '4px';
@@ -86,6 +154,7 @@
     button.style.display = 'flex';
     button.style.alignItems = 'center';
     button.style.justifyContent = 'center';
+    button.style.maxWidth = '100%';
     
     // Camera icon
     const cameraIcon = document.createElement('span');
@@ -101,8 +170,10 @@
     
     if (insertInside) {
       container.appendChild(buttonWrapper);
+      console.log("Inserted button inside container");
     } else {
       container.parentNode.insertBefore(buttonWrapper, container.nextSibling);
+      console.log("Inserted button after container");
     }
   }
 

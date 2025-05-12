@@ -11,23 +11,15 @@
       "label": "Button Position",
       "options": [
         {
-          "value": "top-right",
-          "label": "Top Right"
+          "value": "above-buy-buttons",
+          "label": "Above Buy Buttons"
         },
         {
-          "value": "top-left",
-          "label": "Top Left"
-        },
-        {
-          "value": "bottom-right",
-          "label": "Bottom Right"
-        },
-        {
-          "value": "bottom-left",
-          "label": "Bottom Left"
+          "value": "below-buy-buttons",
+          "label": "Below Buy Buttons"
         }
       ],
-      "default": "bottom-right"
+      "default": "below-buy-buttons"
     },
     {
       "type": "text",
@@ -36,9 +28,16 @@
       "default": "Try On Virtually"
     },
     {
+      "type": "checkbox",
+      "id": "use_theme_color",
+      "label": "Match store theme color",
+      "default": true,
+      "info": "Automatically uses your store's accent color"
+    },
+    {
       "type": "color",
       "id": "button_color",
-      "label": "Button Color",
+      "label": "Custom Button Color",
       "default": "#008060"
     },
     {
