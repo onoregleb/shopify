@@ -1,51 +1,12 @@
+{% comment %}
+This block has been disabled to prevent duplicate virtual try-on buttons.
+The functionality has been moved to product-app-block.liquid.
+{% endcomment %}
+
 {% schema %}
 {
   "name": "Virtual Try-On Button",
   "target": "body",
-  "javascript": "vton-button.js",
-  "stylesheet": "vton-button.css",
-  "settings": [
-    {
-      "type": "select",
-      "id": "button_position",
-      "label": "Button Position",
-      "options": [
-        {
-          "value": "above-buy-buttons",
-          "label": "Above Buy Buttons"
-        },
-        {
-          "value": "below-buy-buttons",
-          "label": "Below Buy Buttons"
-        }
-      ],
-      "default": "below-buy-buttons"
-    },
-    {
-      "type": "text",
-      "id": "button_text",
-      "label": "Button Text",
-      "default": "Try On Virtually"
-    },
-    {
-      "type": "checkbox",
-      "id": "use_theme_color",
-      "label": "Match store theme color",
-      "default": true,
-      "info": "Automatically uses your store's accent color"
-    },
-    {
-      "type": "color",
-      "id": "button_color",
-      "label": "Custom Button Color",
-      "default": "#008060"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text Color",
-      "default": "#FFFFFF"
-    }
-  ]
+  "settings": []
 }
-{% endschema %} 
+{% endschema %}

@@ -6,6 +6,22 @@
   "stylesheet": "vton-button.css",
   "settings": [
     {
+      "type": "select",
+      "id": "button_position",
+      "label": "Button Position",
+      "options": [
+        {
+          "value": "above-buy-buttons",
+          "label": "Above Buy Buttons"
+        },
+        {
+          "value": "below-buy-buttons",
+          "label": "Below Buy Buttons"
+        }
+      ],
+      "default": "below-buy-buttons"
+    },
+    {
       "type": "text",
       "id": "button_text",
       "label": "Button Text",
@@ -35,4 +51,15 @@
     "templates": ["product"]
   }
 }
-{% endschema %} 
+{% endschema %}
+
+{%- comment -%}Expose settings for JS via data-attributes{%- endcomment -%}
+<div class="vton-settings" style="display:none"
+     data-button-position="{{ block.settings.button_position }}"
+     data-button-text="{{ block.settings.button_text }}"
+     data-use-theme-color="{{ block.settings.use_theme_color }}"
+     data-button-color="{{ block.settings.button_color }}"
+     data-text-color="{{ block.settings.text_color }}">
+</div>
+
+<script src="{{ 'vton-product-button.js' | asset_url }}" defer></script>

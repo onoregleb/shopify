@@ -35,7 +35,7 @@
     
     // Method 4: Extract from form
     if (!productId) {
-      const productForm = document.querySelector('form[action*="/cart/add"]');
+      const productForm = document.querySelector('form[action*="/cart/add"], form[action="/cart"], form[action^="/cart" i]');
       if (productForm) {
         const idInput = productForm.querySelector('input[name="id"]');
         if (idInput) {
@@ -66,13 +66,59 @@
     return;
   }
 
-  // Get button settings from the app block
-  const buttonSettings = {
-    text: "{{ block.settings.button_text }}",
-    useThemeColor: "{{ block.settings.use_theme_color }}" === "true",
-    buttonColor: "{{ block.settings.button_color }}",
-    textColor: "{{ block.settings.text_color }}"
+  // Default settings
+  const defaultSettings = {
+    position: 'below-buy-buttons',
+    text: 'Try On Virtually',
+    useThemeColor: true,
+    buttonColor: '#008060',
+    textColor: '#FFFFFF'
   };
+
+  // Retrieve settings from hidden div injected by block or global variable
+  function getButtonSettings() {
+    // 1. Hidden div with class vton-settings
+    const settingsEl = document.querySelector('.vton-settings');
+    if (settingsEl) {
+      console.log('Found settings element with data:', {
+        position: settingsEl.dataset.buttonPosition,
+        text: settingsEl.dataset.buttonText,
+        useThemeColor: settingsEl.dataset.useThemeColor,
+        buttonColor: settingsEl.dataset.buttonColor,
+        textColor: settingsEl.dataset.textColor
+      });
+      
+      return {
+        position: settingsEl.dataset.buttonPosition || defaultSettings.position,
+        text: settingsEl.dataset.buttonText || defaultSettings.text,
+        useThemeColor: settingsEl.dataset.useThemeColor === 'true',
+        buttonColor: settingsEl.dataset.buttonColor || defaultSettings.buttonColor,
+        textColor: settingsEl.dataset.textColor || defaultSettings.textColor
+      };
+    }
+
+    // 2. Global variable injected inline
+    if (window.__vtonButtonConfig) {
+      return { ...defaultSettings, ...window.__vtonButtonConfig };
+    }
+
+    // 3. Dataset on current script tag (if configured)
+    const scriptTag = document.currentScript;
+    if (scriptTag) {
+      return {
+        position: scriptTag.dataset.buttonPosition || defaultSettings.position,
+        text: scriptTag.dataset.buttonText || defaultSettings.text,
+        useThemeColor: scriptTag.dataset.useThemeColor === 'true',
+        buttonColor: scriptTag.dataset.buttonColor || defaultSettings.buttonColor,
+        textColor: scriptTag.dataset.textColor || defaultSettings.textColor
+      };
+    }
+
+    // 4. Fallback to defaults
+    return defaultSettings;
+  }
+
+  const buttonSettings = getButtonSettings();
 
   // Detect theme accent color
   function getThemeColor() {
@@ -86,8 +132,17 @@
     return themeAccentColor.trim();
   }
 
+  // Global flag to track if the button has been added
+  window.__vtonButtonAdded = false;
+
   // Create try-on button
   function createTryOnButton() {
+    // Check if button already exists to prevent duplicates
+    if (document.getElementById('vton-product-button')) {
+      console.log('VTON: Button already exists, not adding again');
+      return;
+    }
+
     // Use a wider set of selectors to find the buy button area
     const buyButtonSelectors = [
       // Form selectors
@@ -108,27 +163,51 @@
       '.product__info-container',
       '.product__meta',
       '.product-single__meta',
-      '[data-product-information]'
+      '[data-product-information]',
+      // Additional common selectors
+      '.product-form',
+      '[data-product-form]',
+      '#product-form',
+      // Theme editor specific
+      '.product-form-container',
+      '.product-form-product-template'
     ];
 
     // Try each selector until we find a match
     let buyButtonContainer = null;
     for (const selector of buyButtonSelectors) {
-      const element = document.querySelector(selector);
-      if (element) {
-        buyButtonContainer = element;
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        // Use the last matching element as it's more likely to be the main one
+        // in case there are multiple matching elements (like in theme editor)
+        buyButtonContainer = elements[elements.length - 1];
         console.log("Found buy button container with selector:", selector);
         break;
       }
     }
 
     if (!buyButtonContainer) {
-      console.error("Could not find buy button container, fallback to appending to product form");
-      const productForm = document.querySelector('form[action*="/cart/add"]');
-      if (productForm) {
-        insertButton(productForm, false);
-      } else {
-        console.error("Could not find product form either, aborting");
+      console.warn('VTON: buy button container not found, observing DOM for changes');
+      if (!window.__vtonDomObserver) {
+        window.__vtonDomObserver = new MutationObserver((mutations) => {
+          // Only check if we haven't added the button yet
+          if (window.__vtonButtonAdded || document.getElementById('vton-product-button')) {
+            window.__vtonDomObserver.disconnect();
+            window.__vtonDomObserver = null;
+            return;
+          }
+          
+          // Try again whenever DOM changes
+          for (const selector of buyButtonSelectors) {
+            if (document.querySelector(selector)) {
+              window.__vtonDomObserver.disconnect();
+              window.__vtonDomObserver = null;
+              setTimeout(createTryOnButton, 100); // Small delay to ensure DOM is stable
+              return;
+            }
+          }
+        });
+        window.__vtonDomObserver.observe(document.body, { childList: true, subtree: true });
       }
       return;
     }
@@ -158,8 +237,14 @@
       }
     }
     
+    // Set flag that button has been added
+    window.__vtonButtonAdded = true;
+    
     // Log success
     console.log("Successfully added Product Try-On button");
+
+    // We don't need to observe for changes anymore since we've added the button
+    // If we need to handle dynamic theme changes, we can use a more targeted approach
   }
 
   function insertButton(container, insertInside) {
@@ -202,15 +287,27 @@
     // Add click handler
     button.addEventListener('click', openTryOnModal);
     
-    // Add to page
+    // Add to page based on settings
     buttonWrapper.appendChild(button);
     
-    if (insertInside) {
-      container.appendChild(buttonWrapper);
-      console.log("Inserted button inside container");
+    // Handle insertion based on position setting
+    if (buttonSettings.position === 'above-buy-buttons') {
+      console.log("Positioning button above buy buttons");
+      
+      if (insertInside) {
+        container.insertBefore(buttonWrapper, container.firstChild);
+      } else {
+        container.parentNode.insertBefore(buttonWrapper, container);
+      }
     } else {
-      container.parentNode.insertBefore(buttonWrapper, container.nextSibling);
-      console.log("Inserted button after container");
+      // Default is 'below-buy-buttons'
+      console.log("Positioning button below buy buttons");
+      
+      if (insertInside) {
+        container.appendChild(buttonWrapper);
+      } else {
+        container.parentNode.insertBefore(buttonWrapper, container.nextSibling);
+      }
     }
   }
 
@@ -254,6 +351,112 @@
     
     const content = document.createElement('div');
     content.id = 'vton-content';
+    
+    // Create drag and drop area
+    const dropArea = document.createElement('div');
+    dropArea.id = 'vton-drop-area';
+    dropArea.style.border = '2px dashed #ccc';
+    dropArea.style.borderRadius = '8px';
+    dropArea.style.padding = '40px';
+    dropArea.style.textAlign = 'center';
+    dropArea.style.marginBottom = '20px';
+    dropArea.style.backgroundColor = '#f9f9f9';
+    dropArea.style.transition = 'all 0.3s ease';
+    
+    const dropText = document.createElement('p');
+    dropText.textContent = 'Drag & drop your image here or click to select';
+    dropText.style.fontSize = '16px';
+    dropText.style.color = '#666';
+    dropText.style.marginBottom = '10px';
+    
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'vton-file-input';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    
+    const browseButton = document.createElement('button');
+    browseButton.textContent = 'Browse Files';
+    browseButton.style.backgroundColor = getThemeColor();
+    browseButton.style.color = '#fff';
+    browseButton.style.border = 'none';
+    browseButton.style.borderRadius = '4px';
+    browseButton.style.padding = '10px 20px';
+    browseButton.style.cursor = 'pointer';
+    browseButton.style.fontSize = '14px';
+    browseButton.onclick = () => fileInput.click();
+    
+    const previewArea = document.createElement('div');
+    previewArea.id = 'vton-preview-area';
+    previewArea.style.marginTop = '20px';
+    previewArea.style.display = 'none';
+    
+    const previewImage = document.createElement('img');
+    previewImage.id = 'vton-preview-image';
+    previewImage.style.maxWidth = '100%';
+    previewImage.style.maxHeight = '400px';
+    previewImage.style.borderRadius = '4px';
+    previewImage.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+    
+    const tryOnButton = document.createElement('button');
+    tryOnButton.id = 'vton-process-button';
+    tryOnButton.textContent = 'Process Image';
+    tryOnButton.style.backgroundColor = getThemeColor();
+    tryOnButton.style.color = '#fff';
+    tryOnButton.style.border = 'none';
+    tryOnButton.style.borderRadius = '4px';
+    tryOnButton.style.padding = '10px 20px';
+    tryOnButton.style.cursor = 'pointer';
+    tryOnButton.style.fontSize = '14px';
+    tryOnButton.style.marginTop = '15px';
+    tryOnButton.style.display = 'none';
+    
+    const resultArea = document.createElement('div');
+    resultArea.id = 'vton-result-area';
+    resultArea.style.marginTop = '20px';
+    
+    // Add event listeners for drag and drop
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.style.backgroundColor = '#e9e9e9';
+      dropArea.style.borderColor = getThemeColor();
+    });
+    
+    dropArea.addEventListener('dragleave', () => {
+      dropArea.style.backgroundColor = '#f9f9f9';
+      dropArea.style.borderColor = '#ccc';
+    });
+    
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.style.backgroundColor = '#f9f9f9';
+      dropArea.style.borderColor = '#ccc';
+      
+      const files = e.dataTransfer.files;
+      handleFiles(files);
+    });
+    
+    dropArea.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', () => {
+      handleFiles(fileInput.files);
+    });
+    
+    tryOnButton.addEventListener('click', processImage);
+    
+    // Add elements to the DOM
+    dropArea.appendChild(dropText);
+    dropArea.appendChild(browseButton);
+    dropArea.appendChild(fileInput);
+    
+    previewArea.appendChild(previewImage);
+    previewArea.appendChild(tryOnButton);
+    
+    content.appendChild(dropArea);
+    content.appendChild(previewArea);
+    content.appendChild(resultArea);
 
     modalContent.appendChild(closeButton);
     modalContent.appendChild(title);
@@ -265,24 +468,15 @@
   // Open the try-on modal
   function openTryOnModal(e) {
     e.preventDefault();
+    e.stopPropagation(); // Stop event propagation to prevent cart from opening
     
     const modal = document.getElementById('vton-modal');
     if (!modal) {
       createModal();
     }
     
-    const content = document.getElementById('vton-content');
-    content.innerHTML = '<p>Loading virtual try-on experience...</p>';
-    
-    // Load iframe pointing to the app's try-on page
-    const iframe = document.createElement('iframe');
-    iframe.src = `https://${SHOP_DOMAIN}/apps/modera-fashion/try-on?productId=${productId}`;
-    iframe.style.width = '100%';
-    iframe.style.height = '600px';
-    iframe.style.border = 'none';
-    
-    content.innerHTML = '';
-    content.appendChild(iframe);
+    // Reset the modal content
+    resetModalContent();
     
     document.getElementById('vton-modal').style.display = 'block';
     
@@ -302,12 +496,172 @@
   // Close the modal
   function closeModal() {
     document.getElementById('vton-modal').style.display = 'none';
+    resetModalContent();
+  }
+  
+  // Reset modal content
+  function resetModalContent() {
+    const previewArea = document.getElementById('vton-preview-area');
+    const resultArea = document.getElementById('vton-result-area');
+    const fileInput = document.getElementById('vton-file-input');
+    const tryOnButton = document.getElementById('vton-process-button');
+    
+    if (previewArea) previewArea.style.display = 'none';
+    if (resultArea) resultArea.innerHTML = '';
+    if (fileInput) fileInput.value = '';
+    if (tryOnButton) tryOnButton.style.display = 'none';
+  }
+  
+  // Handle files selected by user
+  function handleFiles(files) {
+    if (files.length === 0) return;
+    
+    const file = files[0];
+    if (!file.type.match('image.*')) {
+      alert('Please select an image file');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const previewArea = document.getElementById('vton-preview-area');
+      const previewImage = document.getElementById('vton-preview-image');
+      const tryOnButton = document.getElementById('vton-process-button');
+      
+      previewImage.src = e.target.result;
+      previewArea.style.display = 'block';
+      tryOnButton.style.display = 'block';
+    };
+    
+    reader.readAsDataURL(file);
+  }
+  
+  // Process the uploaded image
+  function processImage() {
+    const previewImage = document.getElementById('vton-preview-image');
+    const resultArea = document.getElementById('vton-result-area');
+    
+    // Show loading state
+    resultArea.innerHTML = '<p style="text-align: center;">Processing your image...</p>';
+    
+    // Get the product image URL
+    let productImageUrl = '';
+    const productImages = document.querySelectorAll('.product__media img, .product-single__photo img, .product-featured-media img');
+    if (productImages.length > 0) {
+      productImageUrl = productImages[0].src;
+    }
+    
+    // Prepare data for the API
+    const formData = new FormData();
+    formData.append('userImage', dataURLtoBlob(previewImage.src));
+    formData.append('productId', productId);
+    formData.append('shop', SHOP_DOMAIN);
+    if (productImageUrl) {
+      formData.append('productImageUrl', productImageUrl);
+    }
+    
+    // Call the API
+    fetch(`${VTON_API_URL}/process`, {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      return response.json();
+    })
+    .then(data => {
+      // Display the result
+      resultArea.innerHTML = '';
+      
+      const resultImage = document.createElement('img');
+      resultImage.src = data.resultImageUrl || previewImage.src; // Fallback to original if no result
+      resultImage.style.maxWidth = '100%';
+      resultImage.style.maxHeight = '400px';
+      resultImage.style.borderRadius = '4px';
+      resultImage.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+      
+      const resultText = document.createElement('p');
+      resultText.textContent = data.message || 'Virtual try-on complete!';
+      resultText.style.textAlign = 'center';
+      resultText.style.marginTop = '10px';
+      
+      resultArea.appendChild(resultImage);
+      resultArea.appendChild(resultText);
+    })
+    .catch(error => {
+      console.error('Error processing image:', error);
+      resultArea.innerHTML = `<p style="color: red; text-align: center;">Error processing image: ${error.message}</p>`;
+    });
+  }
+  
+  // Helper function to convert Data URL to Blob
+  function dataURLtoBlob(dataURL) {
+    const parts = dataURL.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    
+    return new Blob([uInt8Array], { type: contentType });
+  }
+
+  // Function to handle settings changes and update button if needed
+  function handleSettingsChange() {
+    const button = document.getElementById('vton-product-button');
+    if (!button) return;
+    
+    const settings = getButtonSettings();
+    
+    // Update button text
+    const cameraIcon = button.querySelector('span');
+    if (cameraIcon) {
+      button.textContent = settings.text;
+      button.prepend(cameraIcon);
+    } else {
+      button.textContent = settings.text;
+    }
+    
+    // Update button color
+    let buttonColor = settings.buttonColor;
+    if (settings.useThemeColor) {
+      buttonColor = getThemeColor();
+    }
+    button.style.backgroundColor = buttonColor;
+    button.style.color = settings.textColor;
+    
+    console.log('Updated button with new settings:', settings);
+  }
+  
+  // Watch for changes to the settings element
+  function observeSettingsChanges() {
+    const settingsEl = document.querySelector('.vton-settings');
+    if (settingsEl) {
+      const settingsObserver = new MutationObserver((mutations) => {
+        handleSettingsChange();
+      });
+      
+      settingsObserver.observe(settingsEl, {
+        attributes: true,
+        attributeFilter: ['data-button-position', 'data-button-text', 'data-use-theme-color', 'data-button-color', 'data-text-color']
+      });
+    }
   }
 
   // Initialize the button when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', createTryOnButton);
-  } else {
+  function initialize() {
     createTryOnButton();
+    observeSettingsChanges();
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    setTimeout(initialize, 100); // Small delay to ensure DOM is fully ready
   }
 })(); 
