@@ -11,8 +11,11 @@
   try {
     // Try multiple methods to get the product ID
     // Method 1: Check if window.meta is available
-    if (window.meta && window.meta.product) {
-      productId = window.meta.product.id?.split('/').pop();
+    if (window.meta && window.meta.product && window.meta.product.id) {
+      // Convert to string first to handle both numeric and string IDs
+      const idStr = String(window.meta.product.id);
+      // Check if it's a Shopify GID format that needs splitting
+      productId = idStr.includes('/') ? idStr.split('/').pop() : idStr;
     }
     
     // Method 2: Try ShopifyAnalytics.meta
