@@ -1,6 +1,6 @@
 import { json } from "@remix-run/node";
 import { useNavigate, useSubmit, useActionData, useLoaderData } from "@remix-run/react";
-import { Page, Layout, Card, BlockStack, Text, InlineGrid, Button, List, Banner, Loading, Modal, Box } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, Button, List, Banner, Loading, Modal, Box, InlineGrid } from "@shopify/polaris";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -201,6 +201,109 @@ export async function action({ request }) {
   }
 }
 
+function CardWrapper({ plan, onSubscribe, isLoading }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Card
+        padding="400"
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+          border: plan.recommended ? `2px solid ${plan.color}` : undefined,
+          boxShadow: plan.recommended ? "0 4px 16px rgba(0,0,0,0.08)" : undefined,
+        }}
+      >
+        {plan.recommended && (
+          <div style={{
+            position: "absolute",
+            top: "-12px", left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: plan.color,
+            color: "#fff",
+            padding: "4px 12px",
+            borderRadius: "16px",
+            fontSize: "12px",
+            fontWeight: "bold",
+            boxShadow: "0 2px 5px rgba(0,0,0,0.1)"
+          }}>
+            MOST POPULAR
+          </div>
+        )}
+
+        <BlockStack gap="300" style={{ flex: 1 }}>
+          {/* Заголовок, цена и описание */}
+          <BlockStack gap="200">
+            <Text as="h3" variant="headingLg" alignment="center">
+              {plan.name}
+            </Text>
+            <Text variant="bodyMd" color="subdued" alignment="center">
+              {plan.subtitle}
+            </Text>
+            <Text as="p" variant="heading2xl" fontWeight="bold" alignment="center">
+              ${plan.price}
+              <Text as="span" variant="bodyMd" color="subdued">
+                /month
+              </Text>
+            </Text>
+          </BlockStack>
+
+          {/* Разделитель */}
+          <div style={{
+            height: "1px",
+            background: "rgba(0,0,0,0.07)",
+            width: "100%",
+            margin: "12px 0"
+          }} />
+
+          {/* Список фич */}
+          <BlockStack gap="300" style={{ flex: 1 }}>
+            {plan.features.map(feature => (
+              <div key={feature} style={{
+                display: "flex", alignItems: "flex-start", gap: "8px"
+              }}>
+                <div style={{
+                  color: plan.color,
+                  fontWeight: "bold",
+                  fontSize: "18px",
+                  minWidth: "18px",
+                  lineHeight: "18px"
+                }}>✓</div>
+                <Text variant="bodyMd" style={{ wordBreak: "break-word" }}>
+                  {feature}
+                </Text>
+              </div>
+            ))}
+          </BlockStack>
+
+          {/* Кнопка подписки */}
+          <Box marginTop="auto">
+            <Button
+              primary={plan.recommended}
+              onClick={onSubscribe}
+              loading={isLoading}
+              fullWidth
+              size="large"
+            >
+              {isLoading ? "Processing..." : `Choose ${plan.name}`}
+            </Button>
+            <Text
+              as="p"
+              variant="caption"
+              color="subdued"
+              alignment="center"
+              style={{ marginTop: "8px" }}
+            >
+              3-day free trial, then ${plan.price}/month
+            </Text>
+          </Box>
+        </BlockStack>
+      </Card>
+    </div>
+  );
+}
+
 export default function Billing() {
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -263,7 +366,6 @@ export default function Billing() {
   return (
     <Page
       title="Choose Your Plan"
-      titleMetadata={<Text variant="bodyMd" as="span" color="subdued">All plans include a 3-day free trial</Text>}
       backAction={{ content: "Back", onAction: () => navigate("/app") }}
       divider
     >
@@ -295,7 +397,7 @@ export default function Billing() {
             </Modal.Section>
           </Modal>
 
-          <BlockStack gap="800">
+          <BlockStack gap="500">
             {actionData?.error && (
               <Banner status="critical">
                 {actionData.error}
@@ -314,117 +416,143 @@ export default function Billing() {
               </Box>
             </div>
             
-            <InlineGrid columns={{ xs: 1, md: 3 }} gap="500">
+            <InlineGrid
+              columns={{ xs: 1, md: 3 }}
+              gap="500"
+              style={{
+                /* Располагаем ячейки по высоте одинаково */
+                alignItems: 'stretch',
+              }}
+            >
               {PLANS.map((plan, index) => (
-                <div key={plan.name} style={{ height: '100%' }}>
-                  <Card 
+                <div
+                  key={plan.name}
+                  style={{
+                    /* Обязательно растягиваем обёртку карточки */
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    minHeight: '750px', /* Устанавливаем фиксированную высоту для всех карточек */
+                  }}
+                >
+                  <Card
                     padding="400"
-                    style={{ 
-                      height: '100%', 
-                      display: 'flex', 
+                    style={{
+                      /* Flex:1 чтобы занимать всю высоту ячейки */
+                      flex: 1,
+                      display: 'flex',
                       flexDirection: 'column',
                       position: 'relative',
                       border: plan.recommended ? `2px solid ${plan.color}` : undefined,
-                      boxShadow: plan.recommended ? '0 4px 16px rgba(0, 0, 0, 0.08)' : undefined,
-                      minHeight: '680px'
+                      boxShadow: plan.recommended
+                        ? '0 4px 16px rgba(0,0,0,0.08)'
+                        : undefined,
                     }}
                   >
-                    {plan.recommended && (
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: '-12px', 
-                        left: '50%', 
-                        transform: 'translateX(-50%)',
+                    {/* Бэдж MOST POPULAR для рекомендуемого плана */}
+                    {plan.recommended ? (
+                      <div style={{
                         backgroundColor: plan.color,
                         color: 'white',
-                        padding: '4px 12px',
-                        borderRadius: '16px',
-                        fontSize: '12px',
+                        padding: '8px 0',
+                        textAlign: 'center',
                         fontWeight: 'bold',
-                        boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)'
+                        fontSize: '14px',
+                        borderRadius: '4px',
+                        marginBottom: '16px'
                       }}>
                         MOST POPULAR
                       </div>
+                    ) : (
+                      /* Пустой отступ такой же высоты для выравнивания */
+                      <div style={{ height: '38px', marginBottom: '16px' }}></div>
                     )}
-                    <BlockStack gap="300" style={{ height: '100%' }}>
-                      <BlockStack gap="200">
-                        <Text as="h3" variant="headingLg" alignment="center">
-                          {plan.name}
+                    
+                    <BlockStack gap="300">
+                      <Text as="h3" variant="headingLg" alignment="center">
+                        {plan.name}
+                      </Text>
+                      <Text variant="bodyMd" color="subdued" alignment="center">
+                        {plan.subtitle}
+                      </Text>
+                      <Text as="p" variant="heading2xl" fontWeight="bold" alignment="center">
+                        ${plan.price}
+                        <Text as="span" variant="bodyMd" color="subdued">
+                          /month
                         </Text>
-                        <Text variant="bodyMd" color="subdued" alignment="center">
-                          {plan.subtitle}
-                        </Text>
-                        <div style={{ textAlign: 'center', marginTop: '8px' }}>
-                          <Text as="p" variant="heading2xl" fontWeight="bold">
-                            ${plan.price}
-                            <Text as="span" variant="bodyMd" color="subdued">
-                              /month
-                            </Text>
-                          </Text>
-                        </div>
-                      </BlockStack>
-                      
-                      <div style={{ 
-                        height: '1px', 
-                        background: 'rgba(0, 0, 0, 0.07)', 
-                        width: '100%',
-                        margin: '12px 0'
-                      }}></div>
-                      
-                      <div style={{ flex: 1, padding: '8px 0' }}>
-                        <BlockStack gap="300">
-                          {plan.features.map((feature) => (
-                            <div key={feature} style={{ 
-                              display: 'flex', 
-                              alignItems: 'flex-start', 
-                              gap: '8px',
-                              marginBottom: '6px'
-                            }}>
-                              <div style={{ 
-                                color: plan.color, 
-                                fontWeight: 'bold', 
-                                fontSize: '18px',
-                                minWidth: '18px',
-                                marginTop: '0'
-                              }}>
-                                ✓
-                              </div>
-                              <div style={{ 
-                                color: '#202223', 
-                                fontWeight: 'medium', 
-                                fontSize: '14px',
-                                lineHeight: '20px'
-                              }}>
-                                {feature}
-                              </div>
-                            </div>
-                          ))}
-                        </BlockStack>
-                      </div>
-                      
-                      <div style={{ marginTop: 'auto' }}>
-                        <Button
-                          primary={plan.recommended}
-                          onClick={() => handleSubscribe(index)}
-                          loading={isLoading && loadingPlanIndex === index}
-                          fullWidth
-                          size="large"
-                        >
-                          {isLoading && loadingPlanIndex === index ? 
-                            "Processing..." : 
-                            `Choose ${plan.name}`
-                          }
-                        </Button>
-                        <div style={{ 
-                          textAlign: 'center', 
-                          fontSize: '12px', 
-                          color: '#637381',
-                          marginTop: '8px' 
-                        }}>
-                          3-day free trial, then ${plan.price}/month
-                        </div>
-                      </div>
+                      </Text>
                     </BlockStack>
+                    
+                    <div style={{ 
+                      height: '1px', 
+                      background: 'rgba(0, 0, 0, 0.07)', 
+                      width: '100%',
+                      margin: '16px 0'
+                    }}></div>
+                    
+                    {/* Блок с фичами */}
+                    <div
+                      style={{
+                        /* flex:1 чтобы занять всё доступное место и «толкнуть» кнопку вниз */
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'auto',      /* если вдруг очень много фич */
+                        padding: '8px 0 16px', /* Добавляем вертикальные отступы */
+                      }}
+                    >
+                      {plan.features.map(feature => (
+                        <div
+                          key={feature}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '8px',
+                            marginBottom: '6px',
+                            /* чтобы текст фич красиво переносился */
+                            wordBreak: 'break-word',
+                            whiteSpace: 'normal',
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: plan.color,
+                              fontWeight: 'bold',
+                              fontSize: '18px',
+                              minWidth: '18px',
+                              lineHeight: '18px',
+                            }}
+                          >
+                            ✓
+                          </div>
+                          <Text variant="bodyMd">{feature}</Text>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Кнопка внизу */}
+                    <Box marginTop="auto">
+                      <Button
+                        primary={plan.recommended}
+                        onClick={() => handleSubscribe(index)}
+                        loading={isLoading && loadingPlanIndex === index}
+                        fullWidth
+                        size="large"
+                      >
+                        {isLoading && loadingPlanIndex === index
+                          ? 'Processing...'
+                          : `Choose ${plan.name}`}
+                      </Button>
+                      <Text
+                        as="p"
+                        variant="caption"
+                        color="subdued"
+                        alignment="center"
+                        style={{ marginTop: '8px' }}
+                      >
+                        3-day free trial, then ${plan.price}/month
+                      </Text>
+                    </Box>
                   </Card>
                 </div>
               ))}
