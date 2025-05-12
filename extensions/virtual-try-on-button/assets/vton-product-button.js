@@ -375,6 +375,38 @@
     fileInput.accept = 'image/*';
     fileInput.style.display = 'none';
     
+    // Create body part selection dropdown
+    const bodyPartLabel = document.createElement('p');
+    bodyPartLabel.textContent = 'Select body part:';
+    bodyPartLabel.style.fontSize = '14px';
+    bodyPartLabel.style.color = '#666';
+    bodyPartLabel.style.marginTop = '15px';
+    bodyPartLabel.style.marginBottom = '5px';
+    
+    const bodyPartSelect = document.createElement('select');
+    bodyPartSelect.id = 'vton-body-part';
+    bodyPartSelect.style.padding = '8px 12px';
+    bodyPartSelect.style.borderRadius = '4px';
+    bodyPartSelect.style.border = '1px solid #ccc';
+    bodyPartSelect.style.fontSize = '14px';
+    bodyPartSelect.style.width = '200px';
+    bodyPartSelect.style.maxWidth = '100%';
+    bodyPartSelect.style.marginBottom = '15px';
+    
+    // Add options to the dropdown
+    const options = [
+      { value: 'upper_body', text: 'Upper Body' },
+      { value: 'lower_body', text: 'Lower Body' },
+      { value: 'full_body', text: 'Full Body' }
+    ];
+    
+    options.forEach(option => {
+      const optionElement = document.createElement('option');
+      optionElement.value = option.value;
+      optionElement.textContent = option.text;
+      bodyPartSelect.appendChild(optionElement);
+    });
+    
     const browseButton = document.createElement('button');
     browseButton.textContent = 'Browse Files';
     browseButton.style.backgroundColor = getThemeColor();
@@ -384,6 +416,7 @@
     browseButton.style.padding = '10px 20px';
     browseButton.style.cursor = 'pointer';
     browseButton.style.fontSize = '14px';
+    browseButton.style.marginTop = '5px';
     browseButton.onclick = () => fileInput.click();
     
     const previewArea = document.createElement('div');
@@ -454,6 +487,15 @@
     previewArea.appendChild(previewImage);
     previewArea.appendChild(tryOnButton);
     
+    // Add body part selection before the drop area
+    const bodyPartContainer = document.createElement('div');
+    bodyPartContainer.style.marginBottom = '15px';
+    bodyPartContainer.style.textAlign = 'center';
+    
+    bodyPartContainer.appendChild(bodyPartLabel);
+    bodyPartContainer.appendChild(bodyPartSelect);
+    
+    content.appendChild(bodyPartContainer);
     content.appendChild(dropArea);
     content.appendChild(previewArea);
     content.appendChild(resultArea);
@@ -503,13 +545,19 @@
   function resetModalContent() {
     const previewArea = document.getElementById('vton-preview-area');
     const resultArea = document.getElementById('vton-result-area');
-    const fileInput = document.getElementById('vton-file-input');
     const tryOnButton = document.getElementById('vton-process-button');
+    const fileInput = document.getElementById('vton-file-input');
+    const bodyPartSelect = document.getElementById('vton-body-part');
     
-    if (previewArea) previewArea.style.display = 'none';
-    if (resultArea) resultArea.innerHTML = '';
-    if (fileInput) fileInput.value = '';
-    if (tryOnButton) tryOnButton.style.display = 'none';
+    previewArea.style.display = 'none';
+    resultArea.innerHTML = '';
+    tryOnButton.style.display = 'none';
+    fileInput.value = '';
+    
+    // Reset body part selection to default (first option)
+    if (bodyPartSelect) {
+      bodyPartSelect.selectedIndex = 0;
+    }
   }
   
   // Handle files selected by user
@@ -540,6 +588,7 @@
   function processImage() {
     const previewImage = document.getElementById('vton-preview-image');
     const resultArea = document.getElementById('vton-result-area');
+    const bodyPartSelect = document.getElementById('vton-body-part');
     
     // Show loading state
     resultArea.innerHTML = '<p style="text-align: center;">Processing your image...</p>';
@@ -551,11 +600,15 @@
       productImageUrl = productImages[0].src;
     }
     
+    // Get selected body part
+    const bodyPart = bodyPartSelect.value;
+    
     // Prepare data for the API
     const formData = new FormData();
     formData.append('userImage', dataURLtoBlob(previewImage.src));
     formData.append('productId', productId);
     formData.append('shop', SHOP_DOMAIN);
+    formData.append('bodyPart', bodyPart);
     if (productImageUrl) {
       formData.append('productImageUrl', productImageUrl);
     }
