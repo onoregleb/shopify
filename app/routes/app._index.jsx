@@ -160,13 +160,21 @@ export default function Index() {
                   </BlockStack>
                   
                   <div style={{ textAlign: 'center' }}>
-                    <Button 
-                      primary 
-                      size="large"
-                      onClick={() => navigate('/app/billing')}
-                    >
-                      Get Started with a 3-Day Free Trial
-                    </Button>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+                      <Button 
+                        primary 
+                        size="large"
+                        onClick={() => navigate('/app/billing')}
+                      >
+                        Get Started with a 3-Day Free Trial
+                      </Button>
+                      <Button 
+                        size="large"
+                        onClick={() => window.open('https://www.modera.fashion/?lang=en', '_blank')}
+                      >
+                        Watch Demo
+                      </Button>
+                    </div>
                   </div>
                 </BlockStack>
               </div>
@@ -174,22 +182,6 @@ export default function Index() {
           </Card>
         </Layout.Section>
 
-        {/* Demo Image Section */}
-        <Layout.Section>
-          <CalloutCard
-            title="See it in action"
-            illustration="https://cdn.shopify.com/s/files/1/0728/0253/4803/files/Screenshot_2023-12-13_at_21.01.36.png?v=1702497784"
-            primaryAction={{
-              content: 'Watch demo video',
-              onAction: () => {},
-            }}
-          >
-            <p>
-              Our virtual try-on technology allows customers to see how products look on them before purchasing.
-              This increases buyer confidence and reduces return rates.
-            </p>
-          </CalloutCard>
-        </Layout.Section>
 
         {/* How It Works Banner */}
         <Layout.Section>
