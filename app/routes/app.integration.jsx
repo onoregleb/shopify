@@ -323,7 +323,7 @@ export default function Integration() {
                             Find the <strong>Virtual Try-On Button</strong> and toggle it ON
                           </List.Item>
                           <List.Item>
-                            Customize the button settings (position, colors, etc.)
+                            Customize the button settings (position, colors, etc.) - <strong>Note:</strong> To apply custom button colors, set <strong>Match store theme color</strong> to <strong>False</strong>
                           </List.Item>
                           <List.Item>
                             Click <strong>Save</strong> to activate
