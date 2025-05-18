@@ -1,5 +1,5 @@
 (() => {
-  const VTON_API_URL = "https://api.modera-fashion.com/vton";
+  const VTON_API_URL = "https://api.modera.fashion/v2/vton";
   const SHOP_DOMAIN = Shopify.shop;
 
   // Check if we're on a product page
