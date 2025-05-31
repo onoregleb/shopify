@@ -1,9 +1,10 @@
 (() => {
-  const VTON_API_URL = "https://api.modera.fashion/api/v2/vton";
-  const SEGMENTATION_API_URL = "http://api.modera.fashion/api/v2/segmentation/run";
-  const SEGMENTATION_STATUS_API_URL = "http://api.modera.fashion/api/v2/segmentation/status";
-  const TRYON_API_URL = "https://api.modera.fashion/api/v2/tryon/run";
-  const TRYON_STATUS_API_URL = "https://api.modera.fashion/api/v2/tryon/status";
+  const VTON_API_URL = "https://api.modera.fashion/v2/vton";
+  const SEGMENTATION_API_URL = "https://api.modera.fashion/api/v2/segmentation/run";
+  const SEGMENTATION_STATUS_API_URL = "https://api.modera.fashion/api/v2/segmentation/status";
+  const TRYON_API_URL = "https://api.modera.fashion/v2/tryon/run";
+  const TRYON_STATUS_API_URL = "https://api.modera.fashion/v2/tryon/status";
+  const S3_BUCKET_URL = "https://s3.eu-central-2.amazonaws.com/storage.modera.fashion/";
   const USER_ID = "096271a3-6e2e-4cba-96db-e2f20987f27c";
   const SHOP_DOMAIN = Shopify.shop;
 
@@ -487,14 +488,16 @@
     
     const browseButton = document.createElement('button');
     browseButton.textContent = 'Browse Files';
-    browseButton.style.backgroundColor = getThemeColor();
-    browseButton.style.color = '#fff';
+    browseButton.style.backgroundColor = '#333333';
+    browseButton.style.color = '#FFFFFF';
     browseButton.style.border = 'none';
     browseButton.style.borderRadius = '4px';
     browseButton.style.padding = '10px 20px';
     browseButton.style.cursor = 'pointer';
     browseButton.style.fontSize = '14px';
     browseButton.style.marginTop = '5px';
+    browseButton.style.fontWeight = 'bold';
+    browseButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)';
     browseButton.onclick = () => fileInput.click();
     
     const previewArea = document.createElement('div');
@@ -512,8 +515,8 @@
     const tryOnButton = document.createElement('button');
     tryOnButton.id = 'vton-process-button';
     tryOnButton.textContent = 'Process Image';
-    tryOnButton.style.backgroundColor = getThemeColor();
-    tryOnButton.style.color = '#fff';
+    tryOnButton.style.backgroundColor = '#333333'; // Dark gray background
+    tryOnButton.style.color = '#FFFFFF'; // White text
     tryOnButton.style.border = 'none';
     tryOnButton.style.borderRadius = '4px';
     tryOnButton.style.padding = '10px 20px';
@@ -521,6 +524,10 @@
     tryOnButton.style.fontSize = '14px';
     tryOnButton.style.marginTop = '15px';
     tryOnButton.style.display = 'none';
+    tryOnButton.style.fontWeight = 'bold';
+    tryOnButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)'; // Add subtle text shadow for better readability
+    tryOnButton.style.width = '100%';
+    tryOnButton.style.maxWidth = '100%';
     
     const resultArea = document.createElement('div');
     resultArea.id = 'vton-result-area';
@@ -788,7 +795,6 @@
     }
     
     // Step 1: Run segmentation on the product image
-    // Используем точно такой же формат данных, как в рабочем Python-примере
     const segmentationData = {
       user_id: USER_ID,
       image: productImageUrl,
@@ -809,26 +815,22 @@
       }
     }, 500);
     
-    console.log('Full request details:', {
-      url: SEGMENTATION_API_URL,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(segmentationData)
-    });
-    
-    // Добавляем режим no-cors для обхода ограничений CORS в браузере
-    // Это может помочь с ошибкой подключения, но ответ будет непрозрачным (opaque)
+    // Make the API request
     fetch(SEGMENTATION_API_URL, {
       method: 'POST',
-      mode: 'no-cors', // Пробуем обойти ограничения CORS
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(segmentationData)
     })
     .then(response => {
+      if (response.status === 422) {
+        return response.json().then(errorData => {
+          throw new Error(`Validation Error: ${errorData.detail.map(err => err.msg).join(', ')}`);
+        });
+      }
       if (!response.ok) {
-        throw new Error('Segmentation API response was not ok: ' + response.status);
+        throw new Error(`Segmentation API response was not ok: ${response.status} - ${response.statusText}`);
       }
       return response.json();
     })
@@ -864,13 +866,18 @@
     return new Promise((resolve, reject) => {
       const statusInterval = setInterval(() => {
         fetch(SEGMENTATION_STATUS_API_URL, {
-          method: 'POST',  // Changed to POST as per API documentation
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ process_id: processId })
         })
         .then(response => {
+          if (response.status === 422) {
+            return response.json().then(errorData => {
+              throw new Error(`Validation Error: ${errorData.detail.map(err => err.msg).join(', ')}`);
+            });
+          }
           if (!response.ok) {
             throw new Error('Segmentation status API response was not ok: ' + response.status);
           }
@@ -887,10 +894,15 @@
             progressBar.style.width = '50%';
             resultArea.querySelector('p').textContent = 'Segmentation complete. Starting virtual try-on...';
             
-            // The output contains the root folder with object.jpg and mask.jpg
-            const segmentedImageUrl = statusData.output + '/object.jpg';
+            // Add S3 bucket prefix to the segmentation_output
+            const segmentationOutputPath = statusData.segmentation_output;
+            // Create full URL by combining S3 bucket URL with the path
+            const segmentedImageUrl = S3_BUCKET_URL + segmentationOutputPath;
             
-            // Resolve with the segmented image URL
+            console.log('Original segmentation path:', segmentationOutputPath);
+            console.log('Full segmentation URL:', segmentedImageUrl);
+            
+            // Resolve with the complete segmented image URL
             resolve({
               segmentedImageUrl: segmentedImageUrl,
               userImageSrc: userImageSrc,
@@ -930,10 +942,19 @@
     }, 500);
     
     // Prepare try-on data
+    let garmentImage = segmentationResult.segmentedImageUrl;
+    
+    // Check if garmentImage doesn't start with the S3 bucket URL
+    if (garmentImage && !garmentImage.startsWith('https://')) {
+      // Add the S3 bucket prefix if it's just a path
+      garmentImage = S3_BUCKET_URL + garmentImage;
+      console.log('Added S3 bucket prefix to garment image:', garmentImage);
+    }
+    
     const tryOnData = {
       user_id: USER_ID,
       model_image: segmentationResult.userImageSrc,
-      garment_image: segmentationResult.segmentedImageUrl,
+      garment_image: garmentImage,
       category: segmentationResult.bodyPart
     };
     
@@ -951,7 +972,7 @@
     
     fetch(TRYON_API_URL, {
       method: 'POST',
-      mode: 'no-cors', // Добавляем режим no-cors для обхода ограничений CORS
+      mode: 'no-cors', // Add no-cors mode
       headers: {
         'Content-Type': 'application/json'
       },
@@ -988,7 +1009,7 @@
     const statusInterval = setInterval(() => {
       fetch(TRYON_STATUS_API_URL, {
         method: 'POST',
-        mode: 'no-cors', // Добавляем режим no-cors для обхода ограничений CORS
+        mode: 'no-cors', // Add no-cors mode
         headers: {
           'Content-Type': 'application/json'
         },
@@ -1031,8 +1052,8 @@
             
             const downloadButton = document.createElement('button');
             downloadButton.textContent = 'Download Image';
-            downloadButton.style.backgroundColor = getThemeColor();
-            downloadButton.style.color = '#fff';
+            downloadButton.style.backgroundColor = '#333333';
+            downloadButton.style.color = '#FFFFFF';
             downloadButton.style.border = 'none';
             downloadButton.style.borderRadius = '4px';
             downloadButton.style.padding = '10px 20px';
@@ -1040,6 +1061,8 @@
             downloadButton.style.fontSize = '14px';
             downloadButton.style.margin = '15px auto';
             downloadButton.style.display = 'block';
+            downloadButton.style.fontWeight = 'bold';
+            downloadButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)';
             downloadButton.onclick = () => {
               // Create a temporary link to download the image
               const a = document.createElement('a');
