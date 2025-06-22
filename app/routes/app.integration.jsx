@@ -18,16 +18,15 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { fetchButtonSettings } from "../utils/settings.server";
+import { prisma } from "../utils/prisma.server";
 
 export async function loader({ request }) {
-  console.log("Integration loader: Starting with URL", request.url);
   
   try {
     // Проверка наличия параметра shop в URL
     const url = new URL(request.url);
     const shopParam = url.searchParams.get("shop");
     
-    console.log("Integration loader: Shop parameter from URL:", shopParam);
     
     // Более детальный подход к аутентификации
     const authOptions = {
@@ -36,8 +35,6 @@ export async function loader({ request }) {
       checkAuth: true,
       fallback: true
     };
-    
-    console.log("Integration loader: Using auth options:", JSON.stringify(authOptions));
     
     try {
       const { admin, session } = await authenticate.admin(request, authOptions);
@@ -85,6 +82,24 @@ export async function loader({ request }) {
           }
           
           console.log("Integration loader: Subscription activated successfully");
+          
+          // После успешной активации подписки обновляем лимиты и кредиты
+          if (activateData.data?.appSubscriptionActivate?.appSubscription?.status === "ACTIVE") {
+            let limit = 100;
+            let planName = activateData.data?.appSubscriptionActivate?.appSubscription?.name || "Trend";
+            if (planName.includes("Runway")) limit = 500;
+            if (planName.includes("High Fashion")) limit = 2000;
+            await prisma.usageLimit.upsert({
+              where: { shop: session.shop },
+              update: { limit, planName },
+              create: { shop: session.shop, limit, planName }
+            });
+            await prisma.credits.upsert({
+              where: { shop: session.shop },
+              update: { amount: limit },
+              create: { shop: session.shop, amount: limit }
+            });
+          }
         } catch (error) {
           console.error("Integration loader: Error activating subscription:", error);
           return json({ error: "Failed to activate subscription" }, { status: 500 });
@@ -144,7 +159,6 @@ export async function loader({ request }) {
         console.error("Integration loader: Could not load button settings:", error);
       }
       
-      console.log("Integration loader: Returning successful response");
       return json({
         shop: session.shop,
         hasActiveSubscription: data?.data?.currentAppInstallation?.activeSubscriptions?.length > 0,

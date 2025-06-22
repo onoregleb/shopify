@@ -100,6 +100,22 @@ export const loader = async ({ request }) => {
         },
       });
       console.log("Billing Callback: Subscription record successfully upserted in database");
+
+      // Обновляем лимиты и кредиты при активации подписки
+      let limit = 100;
+      let planName = data.node.name || "Trend";
+      if (planName.includes("Runway")) limit = 500;
+      if (planName.includes("High Fashion")) limit = 2000;
+      await prisma.usageLimit.upsert({
+        where: { shop },
+        update: { limit, planName },
+        create: { shop, limit, planName }
+      });
+      await prisma.credits.upsert({
+        where: { shop },
+        update: { amount: limit },
+        create: { shop, amount: limit }
+      });
     } catch (dbError) {
       console.error("Billing Callback: Failed to upsert subscription record:", dbError);
     }

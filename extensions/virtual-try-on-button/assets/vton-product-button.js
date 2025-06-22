@@ -1,11 +1,6 @@
 (() => {
-  const VTON_API_URL = "https://api.modera.fashion/v2/vton";
-  const SEGMENTATION_API_URL = "https://api.modera.fashion/api/v2/segmentation/run";
-  const SEGMENTATION_STATUS_API_URL = "https://api.modera.fashion/api/v2/segmentation/status";
-  const TRYON_API_URL = "https://api.modera.fashion/v2/tryon/run";
-  const TRYON_STATUS_API_URL = "https://api.modera.fashion/v2/tryon/status";
-  const S3_BUCKET_URL = "https://s3.eu-central-2.amazonaws.com/storage.modera.fashion/";
-  const USER_ID = "096271a3-6e2e-4cba-96db-e2f20987f27c";
+  const VTON_API_RUN_URL = "/apps/tryon/run";
+  const VTON_API_STATUS_URL = "/apps/tryon/status";
   const SHOP_DOMAIN = Shopify.shop;
 
   // Check if we're on a product page
@@ -16,20 +11,15 @@
   let productId = null;
   try {
     // Try multiple methods to get the product ID
-    // Method 1: Check if window.meta is available
     if (window.meta && window.meta.product && window.meta.product.id) {
-      // Convert to string first to handle both numeric and string IDs
       const idStr = String(window.meta.product.id);
-      // Check if it's a Shopify GID format that needs splitting
       productId = idStr.includes('/') ? idStr.split('/').pop() : idStr;
     }
     
-    // Method 2: Try ShopifyAnalytics.meta
     if (!productId && window.ShopifyAnalytics && window.ShopifyAnalytics.meta) {
       productId = window.ShopifyAnalytics.meta.product?.id;
     }
     
-    // Method 3: Look for product JSON in the DOM
     if (!productId) {
       const productJsonScript = document.querySelector('script[type="application/json"][data-product-json]');
       if (productJsonScript) {
@@ -58,10 +48,8 @@
       const pathParts = window.location.pathname.split('/');
       const productsIndex = pathParts.indexOf('products');
       if (productsIndex >= 0 && pathParts.length > productsIndex + 1) {
-        // This gives us the handle, not the ID, but it's better than nothing
         const handle = pathParts[productsIndex + 1];
         console.log('Using product handle from URL:', handle);
-        // We'll use the handle as a fallback
         productId = handle;
       }
     }
@@ -287,7 +275,6 @@
     button.style.justifyContent = 'center';
     button.style.maxWidth = '100%';
     
-
     // Add click handler
     button.addEventListener('click', openTryOnModal);
     
@@ -312,6 +299,300 @@
       } else {
         container.parentNode.insertBefore(buttonWrapper, container.nextSibling);
       }
+    }
+  }
+
+  // Function to handle settings changes and update button if needed
+  function handleSettingsChange() {
+    const button = document.getElementById('vton-product-button');
+    if (!button) return;
+    
+    const settings = getButtonSettings();
+    
+    // Update button text
+    const cameraIcon = button.querySelector('span');
+    if (cameraIcon) {
+      button.textContent = settings.text;
+      button.prepend(cameraIcon);
+    } else {
+      button.textContent = settings.text;
+    }
+    
+    // Update button color
+    let buttonColor = settings.buttonColor;
+    if (settings.useThemeColor) {
+      buttonColor = getThemeColor();
+    }
+    button.style.backgroundColor = buttonColor;
+    button.style.color = settings.textColor;
+    
+    console.log('Updated button with new settings:', settings);
+  }
+  
+  // Watch for changes to the settings element
+  function observeSettingsChanges() {
+    const settingsEl = document.querySelector('.vton-settings');
+    if (settingsEl) {
+      const settingsObserver = new MutationObserver((mutations) => {
+        handleSettingsChange();
+      });
+      
+      settingsObserver.observe(settingsEl, {
+        attributes: true,
+        attributeFilter: ['data-button-position', 'data-button-text', 'data-use-theme-color', 'data-button-color', 'data-text-color']
+      });
+    }
+  }
+
+  // Initialize the button when DOM is ready
+  function initialize() {
+    createTryOnButton();
+    observeSettingsChanges();
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    setTimeout(initialize, 100); // Small delay to ensure DOM is fully ready
+  }
+
+  // Функция для конвертации изображения в base64
+  async function imageToBase64(imageUrl) {
+    try {
+      // Validate image URL
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        throw new Error('Invalid image URL provided');
+      }
+
+      // Handle data URLs directly
+      if (imageUrl.startsWith('data:')) {
+        return imageUrl.split(',')[1];
+      }
+
+      // Handle blob URLs
+      if (imageUrl.startsWith('blob:')) {
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result.split(',')[1];
+            resolve(base64data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      // Handle regular URLs
+      const response = await fetch(imageUrl, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'image/*'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];
+          resolve(base64data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error converting image to base64:', error);
+      throw new Error(`Failed to convert image: ${error.message}`);
+    }
+  }
+
+  // Функция для получения изображения товара
+  async function getProductImage() {
+    try {
+      const productImage = document.querySelector('.product__media img, .product-single__media img, [data-product-image] img');
+      if (!productImage) {
+        throw new Error('Product image not found');
+      }
+      return productImage.src;
+    } catch (error) {
+      console.error('Error getting product image:', error);
+      throw error;
+    }
+  }
+
+  // Функция для обработки загруженного файла
+  async function handleFiles(files) {
+    if (files.length === 0) return;
+    
+    const file = files[0];
+    if (!file.type.match('image.*')) {
+      alert('Please select an image file');
+      return;
+    }
+    
+    const previewArea = document.getElementById('vton-preview-area');
+    const previewImage = document.getElementById('vton-preview-image');
+    const tryOnButton = document.getElementById('vton-process-button');
+    const resultArea = document.getElementById('vton-result-area');
+    
+    // Показываем превью
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      previewImage.src = e.target.result;
+      previewArea.style.display = 'block';
+      tryOnButton.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Функция для обработки изображения
+  async function processImage() {
+    const tryOnButton = document.getElementById('vton-process-button');
+    const resultArea = document.getElementById('vton-result-area');
+    const bodyPartSelect = document.getElementById('vton-body-part');
+    const previewImage = document.getElementById('vton-preview-image');
+    
+    if (!tryOnButton || !resultArea || !bodyPartSelect || !previewImage) {
+      console.error('Required elements not found');
+      return;
+    }
+
+    const modelImageUrl = previewImage.src;
+    const selectedBodyPart = bodyPartSelect.value;
+
+    if (!modelImageUrl) {
+      resultArea.innerHTML = '<p style="color: red; text-align: center;">Error: No image found</p>';
+      return;
+    }
+
+    // Показываем индикатор загрузки
+    resultArea.innerHTML = `
+      <div style="text-align: center;">
+        <p>Processing image...</p>
+        <div style="width: 100%; max-width: 300px; height: 20px; background-color: #f0f0f0; border-radius: 10px; margin: 10px auto;">
+          <div id="vton-progress-bar" style="width: 0%; height: 100%; background-color: ${getThemeColor()}; border-radius: 10px; transition: width 0.3s;"></div>
+        </div>
+      </div>
+    `;
+
+    try {
+      // Получаем изображение товара
+      const productImageUrl = await getProductImage();
+
+      // Маппинг категорий
+      let category = 'tshirt';
+      if (selectedBodyPart === 'upper_body') category = 'tshirt';
+      else if (selectedBodyPart === 'lower_body') category = 'pants';
+      else if (selectedBodyPart === 'full_body') category = 'dress';
+
+      // Подготавливаем данные для API
+      const data = {
+        user_id: 'test_user',
+        model_image: modelImageUrl,
+        garment_image: productImageUrl,
+        category: category,
+        step: 30,
+        scale: 2.5,
+        seed: Math.floor(Math.random() * 10000)
+      };
+
+      // Отправляем запрос к API /run
+      const response = await fetch(VTON_API_RUN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        throw new Error('API /run request failed');
+      }
+
+      const runResult = await response.json();
+      if (!runResult.process_id) {
+        throw new Error('No process_id returned from API');
+      }
+
+      // Функция для опроса статуса
+      async function pollStatus(processId, maxAttempts = 60, interval = 2000) {
+        let attempts = 0;
+        while (attempts < maxAttempts) {
+          const statusResp = await fetch(VTON_API_STATUS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ process_id: processId })
+          });
+          if (!statusResp.ok) throw new Error('API /status request failed');
+          const statusData = await statusResp.json();
+          if (statusData.status === 'done' && statusData.output) {
+            return statusData.output;
+          } else if (statusData.status === 'failed') {
+            throw new Error('Processing failed');
+          }
+          // Update progress bar
+          const progressBar = document.getElementById('vton-progress-bar');
+          if (progressBar) progressBar.style.width = `${Math.min(100, (attempts / maxAttempts) * 100)}%`;
+          await new Promise(res => setTimeout(res, interval));
+          attempts++;
+        }
+        throw new Error('Timeout waiting for result');
+      }
+
+      // Poll for result
+      const outputImageUrl = await pollStatus(runResult.process_id);
+
+      // Показываем результат
+      resultArea.innerHTML = '';
+      const resultImage = document.createElement('img');
+      resultImage.src = outputImageUrl;
+      resultImage.style.maxWidth = '100%';
+      resultImage.style.maxHeight = '400px';
+      resultImage.style.borderRadius = '4px';
+      resultImage.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+      resultImage.style.display = 'block';
+      resultImage.style.margin = '0 auto';
+      const resultText = document.createElement('p');
+      resultText.textContent = 'Virtual try-on complete!';
+      resultText.style.textAlign = 'center';
+      resultText.style.marginTop = '15px';
+      resultText.style.fontWeight = 'bold';
+      const downloadButton = document.createElement('button');
+      downloadButton.textContent = 'Download Image';
+      downloadButton.style.backgroundColor = '#333333';
+      downloadButton.style.color = '#FFFFFF';
+      downloadButton.style.border = 'none';
+      downloadButton.style.borderRadius = '4px';
+      downloadButton.style.padding = '10px 20px';
+      downloadButton.style.cursor = 'pointer';
+      downloadButton.style.fontSize = '14px';
+      downloadButton.style.margin = '15px auto';
+      downloadButton.style.display = 'block';
+      downloadButton.style.fontWeight = 'bold';
+      downloadButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)';
+      downloadButton.onclick = () => {
+        const a = document.createElement('a');
+        a.href = outputImageUrl;
+        a.download = 'virtual-try-on.jpg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+      resultArea.appendChild(resultImage);
+      resultArea.appendChild(resultText);
+      resultArea.appendChild(downloadButton);
+    } catch (error) {
+      console.error('Error in processImage:', error);
+      resultArea.innerHTML = `<p style="color: red; text-align: center;">Error processing image: ${error.message}</p>`;
     }
   }
 
@@ -433,7 +714,7 @@
       categoryButton.style.cursor = 'pointer';
       categoryButton.style.textAlign = 'center';
       categoryButton.style.transition = 'all 0.2s ease';
-      categoryButton.style.backgroundColor = '#fff';  // Начальный белый фон
+      categoryButton.style.backgroundColor = '#fff';
       
       const categoryIcon = document.createElement('div');
       categoryIcon.textContent = option.icon;
@@ -459,20 +740,19 @@
         // Update hidden select
         bodyPartSelect.value = option.value;
         
-        // Update UI - делаем невыбранные плашки более серыми
+        // Update UI
         document.querySelectorAll('.vton-category-button').forEach(btn => {
           btn.style.border = '2px solid #ccc';
-          btn.style.backgroundColor = '#f0f0f0'; // Серый фон для невыбранных
-          btn.style.opacity = '0.7'; // Уменьшаем непрозрачность
-          btn.style.filter = 'grayscale(30%)'; // Добавляем эффект серого
+          btn.style.backgroundColor = '#f0f0f0';
+          btn.style.opacity = '0.7';
+          btn.style.filter = 'grayscale(30%)';
         });
         
-        // Выбранная плашка выделяется цветом и яркостью
         categoryButton.style.border = `2px solid ${getThemeColor()}`;
-        categoryButton.style.backgroundColor = '#fff'; // Белый фон для выбранной
-        categoryButton.style.opacity = '1'; // Полная непрозрачность
-        categoryButton.style.filter = 'grayscale(0%)'; // Без эффекта серого
-        categoryButton.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'; // Добавляем тень
+        categoryButton.style.backgroundColor = '#fff';
+        categoryButton.style.opacity = '1';
+        categoryButton.style.filter = 'grayscale(0%)';
+        categoryButton.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
       });
       
       categoryContainer.appendChild(categoryButton);
@@ -514,9 +794,9 @@
     
     const tryOnButton = document.createElement('button');
     tryOnButton.id = 'vton-process-button';
-    tryOnButton.textContent = 'Process Image';
-    tryOnButton.style.backgroundColor = '#333333'; // Dark gray background
-    tryOnButton.style.color = '#FFFFFF'; // White text
+    tryOnButton.textContent = 'Start Virtual Try-On';
+    tryOnButton.style.backgroundColor = '#333333';
+    tryOnButton.style.color = '#FFFFFF';
     tryOnButton.style.border = 'none';
     tryOnButton.style.borderRadius = '4px';
     tryOnButton.style.padding = '10px 20px';
@@ -525,9 +805,10 @@
     tryOnButton.style.marginTop = '15px';
     tryOnButton.style.display = 'none';
     tryOnButton.style.fontWeight = 'bold';
-    tryOnButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)'; // Add subtle text shadow for better readability
+    tryOnButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)';
     tryOnButton.style.width = '100%';
     tryOnButton.style.maxWidth = '100%';
+    tryOnButton.onclick = processImage;
     
     const resultArea = document.createElement('div');
     resultArea.id = 'vton-result-area';
@@ -562,8 +843,6 @@
       handleFiles(fileInput.files);
     });
     
-    tryOnButton.addEventListener('click', processImage);
-    
     // Create a step indicator for image upload
     const uploadLabel = document.createElement('h3');
     uploadLabel.textContent = 'Step 2: Upload Your Photo';
@@ -594,12 +873,7 @@
     previewLabel.style.fontSize = '16px';
     previewLabel.style.marginBottom = '10px';
     previewLabel.style.textAlign = 'center';
-    previewLabel.style.display = 'none'; // Initially hidden
-    
-    tryOnButton.textContent = 'Start Virtual Try-On';
-    tryOnButton.style.marginTop = '15px';
-    tryOnButton.style.padding = '12px 24px';
-    tryOnButton.style.fontSize = '16px';
+    previewLabel.style.display = 'none';
     
     previewArea.appendChild(previewLabel);
     previewArea.appendChild(previewImage);
@@ -613,7 +887,7 @@
     bodyPartContainer.appendChild(bodyPartLabel);
     bodyPartContainer.appendChild(bodyPartDescription);
     bodyPartContainer.appendChild(categoryContainer);
-    bodyPartContainer.appendChild(bodyPartSelect); // Hidden select
+    bodyPartContainer.appendChild(bodyPartSelect);
     
     // Create a container for the upload section
     const uploadContainer = document.createElement('div');
@@ -630,13 +904,6 @@
     content.appendChild(previewArea);
     content.appendChild(resultArea);
     
-    // Update the handleFiles function to show the preview label
-    const originalHandleFiles = window.handleFiles;
-    window.handleFiles = function(files) {
-      originalHandleFiles(files);
-      previewLabel.style.display = 'block';
-    };
-
     modalContent.appendChild(closeButton);
     modalContent.appendChild(title);
     modalContent.appendChild(content);
@@ -647,39 +914,16 @@
   // Open the try-on modal
   function openTryOnModal(e) {
     e.preventDefault();
-    e.stopPropagation(); // Stop event propagation to prevent cart from opening
+    e.stopPropagation();
     
     const modal = document.getElementById('vton-modal');
     if (!modal) {
       createModal();
     }
     
-    // Reset the modal content
     resetModalContent();
     
     document.getElementById('vton-modal').style.display = 'block';
-    
-    // Track usage
-    const trackUrl = `${VTON_API_URL}/track-usage`;
-    const trackData = {
-      shop: SHOP_DOMAIN,
-      productId: productId
-    };
-    
-    console.log('Tracking usage - URL:', trackUrl);
-    console.log('Tracking usage - Data:', trackData);
-    
-    fetch(trackUrl, {
-      method: 'POST',
-      mode: 'no-cors', // Добавляем режим no-cors для обхода ограничений CORS
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        shop: SHOP_DOMAIN,
-        productId: productId
-      })
-    }).catch(err => console.error('Error tracking usage:', err));
   }
 
   // Close the modal
@@ -701,464 +945,8 @@
     tryOnButton.style.display = 'none';
     fileInput.value = '';
     
-    // Reset body part selection to default (first option)
     if (bodyPartSelect) {
       bodyPartSelect.selectedIndex = 0;
     }
-  }
-  
-  // Handle files selected by user
-  function handleFiles(files) {
-    if (files.length === 0) return;
-    
-    const file = files[0];
-    if (!file.type.match('image.*')) {
-      alert('Please select an image file');
-      return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const previewArea = document.getElementById('vton-preview-area');
-      const previewImage = document.getElementById('vton-preview-image');
-      const tryOnButton = document.getElementById('vton-process-button');
-      
-      previewImage.src = e.target.result;
-      previewArea.style.display = 'block';
-      tryOnButton.style.display = 'block';
-    };
-    
-    reader.readAsDataURL(file);
-  }
-  
-  // Process the uploaded image
-  function processImage() {
-    const previewImage = document.getElementById('vton-preview-image');
-    const resultArea = document.getElementById('vton-result-area');
-    const bodyPartSelect = document.getElementById('vton-body-part');
-    
-    // Show loading state with animation
-    resultArea.innerHTML = `
-      <div style="text-align: center;">
-        <p>Segmenting garment...</p>
-        <div style="width: 100%; max-width: 300px; height: 20px; background-color: #f0f0f0; border-radius: 10px; margin: 10px auto;">
-          <div id="vton-progress-bar" style="width: 0%; height: 100%; background-color: ${getThemeColor()}; border-radius: 10px; transition: width 0.3s;"></div>
-        </div>
-        <div id="vton-animation" style="margin: 20px auto;">
-          <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
-            <style>
-              .spinner { 
-                transform-origin: center;
-                animation: spin 1s linear infinite;
-              }
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            </style>
-            <circle class="spinner" cx="25" cy="25" r="20" fill="none" stroke="${getThemeColor()}" stroke-width="5" stroke-dasharray="60 30" />
-          </svg>
-        </div>
-      </div>
-    `;
-    
-    // Get the product image URL
-    let productImageUrl = '';
-    const productImages = document.querySelectorAll('.product__media img, .product-single__photo img, .product-featured-media img, .product__image, [data-product-featured-image]');
-    if (productImages.length > 0) {
-      // Get the highest resolution image by removing size parameters
-      productImageUrl = productImages[0].src.split('?')[0];
-    }
-    
-    if (!productImageUrl) {
-      resultArea.innerHTML = '<p style="color: red; text-align: center;">Error: Could not find product image</p>';
-      return;
-    }
-    
-    // Get selected body part and map to API category
-    const bodyPart = bodyPartSelect.value;
-    let objectName = '';
-    
-    // Map the selected value to the appropriate object_name for segmentation
-    switch(bodyPart) {
-      case 'upper_body':
-        objectName = 'upper_cloth';
-        break;
-      case 'lower_body':
-        objectName = 'bottom_cloth';
-        break;
-      case 'full_body':
-        objectName = 'dress';
-        break;
-      default:
-        objectName = 'upper_cloth';
-    }
-    
-    // Step 1: Run segmentation on the product image
-    const segmentationData = {
-      user_id: USER_ID,
-      image: productImageUrl,
-      object_name: objectName
-    };
-    
-    console.log('Starting segmentation with data:', segmentationData);
-    console.log('Sending request to URL:', SEGMENTATION_API_URL);
-    console.log('Request body:', JSON.stringify(segmentationData, null, 2));
-    
-    // Start progress animation
-    let progressValue = 0;
-    const progressBar = document.getElementById('vton-progress-bar');
-    const progressInterval = setInterval(() => {
-      if (progressValue < 40) { // Cap at 40% for segmentation phase
-        progressValue += 1;
-        progressBar.style.width = progressValue + '%';
-      }
-    }, 500);
-    
-    // Make the API request
-    fetch(SEGMENTATION_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(segmentationData)
-    })
-    .then(response => {
-      if (response.status === 422) {
-        return response.json().then(errorData => {
-          throw new Error(`Validation Error: ${errorData.detail.map(err => err.msg).join(', ')}`);
-        });
-      }
-      if (!response.ok) {
-        throw new Error(`Segmentation API response was not ok: ${response.status} - ${response.statusText}`);
-      }
-      return response.json();
-    })
-    .then(segmentationResult => {
-      console.log('Segmentation initiated:', segmentationResult);
-      
-      if (!segmentationResult.process_id) {
-        throw new Error('No process ID received from segmentation API');
-      }
-      
-      // Update status message
-      resultArea.querySelector('p').textContent = 'Segmentation in progress...';
-      
-      // Poll for segmentation status
-      return pollSegmentationStatus(segmentationResult.process_id, previewImage.src, bodyPart, progressInterval);
-    })
-    .then(segmentationData => {
-      // Once segmentation is complete, start the try-on process
-      startTryOn(segmentationData);
-    })
-    .catch(error => {
-      clearInterval(progressInterval);
-      console.error('Error in segmentation process:', error);
-      resultArea.innerHTML = `<p style="color: red; text-align: center;">Error during segmentation: ${error.message}</p>`;
-    });
-  }
-  
-  // Poll for segmentation status
-  function pollSegmentationStatus(processId, userImageSrc, bodyPart, progressInterval) {
-    const resultArea = document.getElementById('vton-result-area');
-    const progressBar = document.getElementById('vton-progress-bar');
-    
-    return new Promise((resolve, reject) => {
-      const statusInterval = setInterval(() => {
-        fetch(SEGMENTATION_STATUS_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ process_id: processId })
-        })
-        .then(response => {
-          if (response.status === 422) {
-            return response.json().then(errorData => {
-              throw new Error(`Validation Error: ${errorData.detail.map(err => err.msg).join(', ')}`);
-            });
-          }
-          if (!response.ok) {
-            throw new Error('Segmentation status API response was not ok: ' + response.status);
-          }
-          return response.json();
-        })
-        .then(statusData => {
-          console.log('Segmentation status:', statusData);
-          
-          if (statusData.status === 'done') {
-            clearInterval(statusInterval);
-            clearInterval(progressInterval);
-            
-            // Set progress to 50% after segmentation is done
-            progressBar.style.width = '50%';
-            resultArea.querySelector('p').textContent = 'Segmentation complete. Starting virtual try-on...';
-            
-            // Add S3 bucket prefix to the segmentation_output
-            const segmentationOutputPath = statusData.segmentation_output;
-            // Create full URL by combining S3 bucket URL with the path
-            const segmentedImageUrl = S3_BUCKET_URL + segmentationOutputPath;
-            
-            console.log('Original segmentation path:', segmentationOutputPath);
-            console.log('Full segmentation URL:', segmentedImageUrl);
-            
-            // Resolve with the complete segmented image URL
-            resolve({
-              segmentedImageUrl: segmentedImageUrl,
-              userImageSrc: userImageSrc,
-              bodyPart: bodyPart
-            });
-          } else if (statusData.status === 'failed') {
-            clearInterval(statusInterval);
-            clearInterval(progressInterval);
-            reject(new Error(statusData.output || 'Segmentation process failed'));
-          }
-          // Continue polling if status is 'in_progress'
-        })
-        .catch(error => {
-          clearInterval(statusInterval);
-          clearInterval(progressInterval);
-          reject(error);
-        });
-      }, 1000);
-    });
-  }
-  
-  // Start the try-on process after segmentation is complete
-  function startTryOn(segmentationResult) {
-    const resultArea = document.getElementById('vton-result-area');
-    const progressBar = document.getElementById('vton-progress-bar');
-    
-    // Update UI to show try-on is starting
-    resultArea.querySelector('p').textContent = 'Starting virtual try-on process...';
-    
-    // Start progress animation for try-on phase
-    let progressValue = 50; // Start from 50% (after segmentation)
-    const progressInterval = setInterval(() => {
-      if (progressValue < 90) { // Cap at 90% until complete
-        progressValue += 1;
-        progressBar.style.width = progressValue + '%';
-      }
-    }, 500);
-    
-    // Prepare try-on data
-    let garmentImage = segmentationResult.segmentedImageUrl;
-    
-    // Check if garmentImage doesn't start with the S3 bucket URL
-    if (garmentImage && !garmentImage.startsWith('https://')) {
-      // Add the S3 bucket prefix if it's just a path
-      garmentImage = S3_BUCKET_URL + garmentImage;
-      console.log('Added S3 bucket prefix to garment image:', garmentImage);
-    }
-    
-    const tryOnData = {
-      user_id: USER_ID,
-      model_image: segmentationResult.userImageSrc,
-      garment_image: garmentImage,
-      category: segmentationResult.bodyPart
-    };
-    
-    console.log('Starting try-on with data:', tryOnData);
-    console.log('Sending request to URL:', TRYON_API_URL);
-    console.log('Request body:', JSON.stringify(tryOnData, null, 2));
-    
-    // Call the try-on API
-    console.log('Full try-on request details:', {
-      url: TRYON_API_URL,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tryOnData)
-    });
-    
-    fetch(TRYON_API_URL, {
-      method: 'POST',
-      mode: 'no-cors', // Add no-cors mode
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(tryOnData)
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Try-on API response was not ok: ' + response.status);
-      }
-      return response.json();
-    })
-    .then(tryOnResult => {
-      console.log('Try-on initiated:', tryOnResult);
-      
-      if (!tryOnResult.process_id) {
-        throw new Error('No process ID received from try-on API');
-      }
-      
-      // Poll for try-on status
-      pollTryOnStatus(tryOnResult.process_id, progressInterval);
-    })
-    .catch(error => {
-      clearInterval(progressInterval);
-      console.error('Error in try-on process:', error);
-      resultArea.innerHTML = `<p style="color: red; text-align: center;">Error during try-on: ${error.message}</p>`;
-    });
-  }
-  
-  // Poll for try-on status
-  function pollTryOnStatus(processId, progressInterval) {
-    const resultArea = document.getElementById('vton-result-area');
-    const progressBar = document.getElementById('vton-progress-bar');
-    
-    const statusInterval = setInterval(() => {
-      fetch(TRYON_STATUS_API_URL, {
-        method: 'POST',
-        mode: 'no-cors', // Add no-cors mode
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ process_id: processId })
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Try-on status API response was not ok: ' + response.status);
-        }
-        return response.json();
-      })
-      .then(statusData => {
-        console.log('Try-on status:', statusData);
-        
-        if (statusData.status === 'done') {
-          clearInterval(statusInterval);
-          clearInterval(progressInterval);
-          
-          // Set progress to 100% when try-on is done
-          progressBar.style.width = '100%';
-          
-          // Display the result
-          setTimeout(() => {
-            resultArea.innerHTML = '';
-            
-            const resultImage = document.createElement('img');
-            resultImage.src = statusData.output; // URL to the generated image
-            resultImage.style.maxWidth = '100%';
-            resultImage.style.maxHeight = '400px';
-            resultImage.style.borderRadius = '4px';
-            resultImage.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-            resultImage.style.display = 'block';
-            resultImage.style.margin = '0 auto';
-            
-            const resultText = document.createElement('p');
-            resultText.textContent = 'Virtual try-on complete!';
-            resultText.style.textAlign = 'center';
-            resultText.style.marginTop = '15px';
-            resultText.style.fontWeight = 'bold';
-            
-            const downloadButton = document.createElement('button');
-            downloadButton.textContent = 'Download Image';
-            downloadButton.style.backgroundColor = '#333333';
-            downloadButton.style.color = '#FFFFFF';
-            downloadButton.style.border = 'none';
-            downloadButton.style.borderRadius = '4px';
-            downloadButton.style.padding = '10px 20px';
-            downloadButton.style.cursor = 'pointer';
-            downloadButton.style.fontSize = '14px';
-            downloadButton.style.margin = '15px auto';
-            downloadButton.style.display = 'block';
-            downloadButton.style.fontWeight = 'bold';
-            downloadButton.style.textShadow = '0 1px 2px rgba(0,0,0,0.2)';
-            downloadButton.onclick = () => {
-              // Create a temporary link to download the image
-              const a = document.createElement('a');
-              a.href = statusData.output;
-              a.download = 'virtual-try-on.jpg';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            };
-            
-            resultArea.appendChild(resultImage);
-            resultArea.appendChild(resultText);
-            resultArea.appendChild(downloadButton);
-          }, 500);
-        } else if (statusData.status === 'failed') {
-          clearInterval(statusInterval);
-          clearInterval(progressInterval);
-          resultArea.innerHTML = `<p style="color: red; text-align: center;">Error: ${statusData.output || 'Try-on process failed'}</p>`;
-        }
-        // Continue polling if status is 'in_progress'
-      })
-      .catch(error => {
-        clearInterval(statusInterval);
-        clearInterval(progressInterval);
-        console.error('Error checking try-on status:', error);
-        resultArea.innerHTML = `<p style="color: red; text-align: center;">Error checking try-on status: ${error.message}</p>`;
-      });
-    }, 1000);
-  }
-  
-  // Helper function to convert Data URL to Blob
-  function dataURLtoBlob(dataURL) {
-    const parts = dataURL.split(';base64,');
-    const contentType = parts[0].split(':')[1];
-    const raw = window.atob(parts[1]);
-    const rawLength = raw.length;
-    const uInt8Array = new Uint8Array(rawLength);
-    
-    for (let i = 0; i < rawLength; ++i) {
-      uInt8Array[i] = raw.charCodeAt(i);
-    }
-    
-    return new Blob([uInt8Array], { type: contentType });
-  }
-
-  // Function to handle settings changes and update button if needed
-  function handleSettingsChange() {
-    const button = document.getElementById('vton-product-button');
-    if (!button) return;
-    
-    const settings = getButtonSettings();
-    
-    // Update button text
-    const cameraIcon = button.querySelector('span');
-    if (cameraIcon) {
-      button.textContent = settings.text;
-      button.prepend(cameraIcon);
-    } else {
-      button.textContent = settings.text;
-    }
-    
-    // Update button color
-    let buttonColor = settings.buttonColor;
-    if (settings.useThemeColor) {
-      buttonColor = getThemeColor();
-    }
-    button.style.backgroundColor = buttonColor;
-    button.style.color = settings.textColor;
-    
-    console.log('Updated button with new settings:', settings);
-  }
-  
-  // Watch for changes to the settings element
-  function observeSettingsChanges() {
-    const settingsEl = document.querySelector('.vton-settings');
-    if (settingsEl) {
-      const settingsObserver = new MutationObserver((mutations) => {
-        handleSettingsChange();
-      });
-      
-      settingsObserver.observe(settingsEl, {
-        attributes: true,
-        attributeFilter: ['data-button-position', 'data-button-text', 'data-use-theme-color', 'data-button-color', 'data-text-color']
-      });
-    }
-  }
-
-  // Initialize the button when DOM is ready
-  function initialize() {
-    createTryOnButton();
-    observeSettingsChanges();
-  }
-  
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
-  } else {
-    setTimeout(initialize, 100); // Small delay to ensure DOM is fully ready
   }
 })(); 

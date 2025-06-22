@@ -1,5 +1,6 @@
 import { json } from "@remix-run/node";
 import { getSessionByShop } from "../shopify.server"; // Получаем сессию из БД
+import { prisma } from "../db.server"; // Импортируем prisma
 
 export const loader = async ({ request }) => {
   console.log("Billing Callback: Processing callback");
@@ -77,6 +78,24 @@ export const loader = async ({ request }) => {
     }
 
     console.log("✅ Subscription activated successfully:", activationResult);
+
+    // После успешной активации подписки обновляем лимиты и кредиты
+    if (activationResult.appSubscription?.status === "ACTIVE") {
+      let limit = 100;
+      let planName = activationResult.appSubscription?.name || "Trend";
+      if (planName.includes("Runway")) limit = 500;
+      if (planName.includes("High Fashion")) limit = 2000;
+      await prisma.usageLimit.upsert({
+        where: { shop },
+        update: { limit, planName },
+        create: { shop, limit, planName }
+      });
+      await prisma.credits.upsert({
+        where: { shop },
+        update: { amount: limit },
+        create: { shop, amount: limit }
+      });
+    }
 
     // Возвращаем HTML для закрытия окна
     return new Response(

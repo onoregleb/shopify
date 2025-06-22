@@ -90,3 +90,40 @@ export const SUBSCRIPTION_PLANS = {
     usageLimit: 2000
   }
 };
+
+export async function checkSubscriptionStatus(admin) {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query getSubscriptionStatus {
+          currentAppInstallation {
+            activeSubscriptions {
+              id
+              status
+              name
+              currentPeriodEnd
+              lineItems {
+                plan {
+                  pricingDetails {
+                    ... on AppRecurringPricing {
+                      price {
+                        amount
+                        currencyCode
+                      }
+                      interval
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `
+    );
+    const data = await response.json();
+    return data?.data?.currentAppInstallation?.activeSubscriptions?.[0] || null;
+  } catch (error) {
+    console.error("Error checking subscription status:", error);
+    return null;
+  }
+}

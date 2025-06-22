@@ -66,3 +66,24 @@ model SubscriptionEvent {
   @@index([subscriptionId])
   @@map("subscription_events")
 }
+
+model Credits {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  amount    Int      @default(0)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  
+  @@index([shop])
+}
+
+model UsageLimit {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  limit     Int      @default(100)
+  planName  String   @default("Trend")
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  
+  @@index([shop])
+}

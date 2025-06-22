@@ -53,6 +53,17 @@ export async function action({ request }) {
       return json({ error: "No active subscription found" }, { status: 400 });
     }
 
+    // Проверяем кредиты
+    const credits = await prisma.credits.findUnique({ where: { shop } });
+    if (!credits || credits.amount <= 0) {
+      return json({ error: "No credits left" }, { status: 402 });
+    }
+    // Списываем кредит
+    await prisma.credits.update({
+      where: { shop },
+      data: { amount: { decrement: 1 } }
+    });
+
     // Record usage for the subscription
     const subscriptionId = activeSubscription.id;
     const lineItemId = activeSubscription.lineItems[0].id;
