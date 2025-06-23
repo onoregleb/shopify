@@ -1,3 +1,21 @@
+const express = require('express');
+const cors = require('cors');
+
+const app = express();
+
+// --- ДОБАВЬТЕ ЭТО СРАЗУ ПОСЛЕ СОЗДАНИЯ app ---
+const allowedOrigins = [
+  'https://test-modera.myshopify.com',
+  // Добавьте сюда другие домены, если нужно
+];
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true, // если нужны куки
+}));
+
+// Для поддержки preflight-запросов (OPTIONS)
+app.options('*', cors());
+
 (() => {
   const VTON_API_RUN_URL = "/apps/tryon/run";
   const VTON_API_STATUS_URL = "/apps/tryon/status";
@@ -600,7 +618,7 @@
         await fetch(`${APP_BACKEND_URL}/api/usage-tracker`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId, shop: window.Shopify && window.Shopify.shop })
+          body: JSON.stringify({ productId })
         });
       } catch (err) {
         console.error('Ошибка при попытке списать кредит:', err);

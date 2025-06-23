@@ -369,3 +369,10 @@ This template uses [Remix](https://remix.run). The following Shopify tools are a
 - [App extensions](https://shopify.dev/docs/apps/app-extensions/list)
 - [Shopify Functions](https://shopify.dev/docs/api/functions)
 - [Getting started with internationalizing your app](https://shopify.dev/docs/apps/best-practices/internationalization/getting-started)
+
+## Важно: Списание кредитов
+
+Списание кредитов за виртуальную примерку происходит только через внутренний endpoint `/api/usage-tracker` вашего приложения. 
+Запросы к API tryon (`/apps/tryon/run` и `/apps/tryon/status`) идут через прокси Shopify, но не списывают кредиты.
+
+**Не реализуйте списание кредитов на стороне внешнего API. Весь контроль за лимитами и списаниями ведётся только внутри вашего приложения.**

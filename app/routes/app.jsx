@@ -9,7 +9,6 @@ import { useEffect } from "react";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }) => {
-  console.log('App loader: Starting authentication for URL', request.url);
   
   // Проверка наличия параметра shop в URL
   const url = new URL(request.url);
@@ -17,12 +16,6 @@ export const loader = async ({ request }) => {
   const host = url.searchParams.get("host");
   const embedded = url.searchParams.get("embedded");
   
-  console.log('App loader: URL parameters:', { 
-    shop: shopParam, 
-    host,
-    embedded,
-    pathname: url.pathname
-  });
   
   try {
     // Используем улучшенный подход к аутентификации с дополнительным логированием
@@ -33,16 +26,8 @@ export const loader = async ({ request }) => {
       fallback: true // Добавляем fallback для более устойчивой аутентификации
     };
     
-    console.log('App loader: Auth options:', JSON.stringify(authOptions));
-    
     const { admin, session } = await authenticate.admin(request, authOptions);
     
-    console.log('App loader: Authentication complete', {
-      hasSession: !!session,
-      hasShop: !!session?.shop,
-      shop: session?.shop,
-      hasAccessToken: !!session?.accessToken
-    });
 
     return json({
       apiKey: process.env.SHOPIFY_API_KEY || "",
@@ -51,17 +36,14 @@ export const loader = async ({ request }) => {
       embedded: embedded === "1"
     });
   } catch (error) {
-    console.error('App loader: Authentication error:', error.stack || error);
     
     // Если это ошибка 302 (перенаправление на аутентификацию)
     if (error.status === 302) {
       const location = error.headers?.get('Location');
-      console.log('App loader: 302 redirect detected to:', location);
       
       // Special case: if we're getting redirected to the Shopify admin 
       // after billing confirmation, handle it differently
       if (location?.includes('/admin/apps/')) {
-        console.log('App loader: Detected redirect to admin, returning embedded params');
         // This happens when Shopify tries to load the app in the admin
         // We'll render a minimal container to trigger app bridge embedding
         return json({
@@ -76,13 +58,11 @@ export const loader = async ({ request }) => {
       
       // Handle standard auth redirects
       if (location?.includes('/auth/login')) {
-        console.log('App loader: Auth redirect detected');
         
         // Пропускаем перенаправление и вместо этого возвращаем информацию об ошибке
         if (shopParam) {
           // Create a return path that includes all current query parameters
           const returnPath = url.pathname + url.search;
-          console.log('App loader: Returning auth error with shop parameter and return path:', shopParam, returnPath);
           return json({
             apiKey: process.env.SHOPIFY_API_KEY || "",
             shop: shopParam,
@@ -101,15 +81,7 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey, shop, authError, location, returnPath, host, embedded, isAdminRedirect, targetLocation } = useLoaderData();
-  console.log('App component: Rendering with:', { 
-    apiKey: !!apiKey, 
-    shop, 
-    authError, 
-    location, 
-    host, 
-    embedded,
-    isAdminRedirect
-  });
+  
 
   // Handle billing-related redirects from Shopify Admin
   useEffect(() => {
@@ -117,7 +89,6 @@ export default function App() {
     function handleMessage(event) {
       // Verify the message source and type
       if (event.data && event.data.type === "BILLING_COMPLETED") {
-        console.log("Received billing completed message:", event.data);
         if (event.data.url) {
           window.location.href = event.data.url;
         }
@@ -131,11 +102,9 @@ export default function App() {
   // If this is a redirect from Shopify Admin after billing confirmation
   useEffect(() => {
     if (isAdminRedirect && shop && targetLocation) {
-      console.log('App component: Handling admin redirect to', targetLocation);
       
       // We need to redirect to our app's URL, but maintain the session
       const appUrl = `${window.location.origin}${targetLocation}`;
-      console.log('App component: Redirecting from admin to app URL:', appUrl);
       
       // Use app bridge to navigate if possible
       if (window.shopify && window.shopify.navigate) {
@@ -151,7 +120,6 @@ export default function App() {
   useEffect(() => {
     // Если произошла ошибка аутентификации и у нас есть параметр shop
     if (authError && shop) {
-      console.log('App component: Detected auth error, redirecting to:', location || `/?shop=${shop}`);
       // Instead of using the direct window.location, create a form POST to maintain session
       const form = document.createElement('form');
       form.method = 'POST';

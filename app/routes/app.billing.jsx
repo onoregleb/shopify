@@ -108,7 +108,6 @@ export const loader = async ({ request }) => {
 };
 
 export async function action({ request }) {
-  console.log('Billing Action: Starting subscription creation');
   const { admin, session } = await authenticate.admin(request);
 
   if (!session?.shop) {
@@ -167,13 +166,11 @@ export async function action({ request }) {
     );
 
     const responseJson = await response.json();
-    console.log('Billing Action: GraphQL response:', responseJson);
 
     const confirmationUrl = responseJson.data?.appSubscriptionCreate?.confirmationUrl;
     const userErrors = responseJson.data?.appSubscriptionCreate?.userErrors;
 
     if (userErrors?.length > 0) {
-      console.error('Billing Action: User errors:', userErrors);
       return json({ error: userErrors[0].message }, { status: 400 });
     }
     
@@ -186,7 +183,6 @@ export async function action({ request }) {
     const finalConfirmationUrl = new URL(confirmationUrl);
     finalConfirmationUrl.searchParams.set('shop', shop);
 
-    console.log('Billing Action: Success. Final confirmation URL:', finalConfirmationUrl.toString());
     return json({ 
       confirmationUrl: finalConfirmationUrl.toString(),
       shop,
@@ -316,19 +312,16 @@ export default function Billing() {
 
   useEffect(() => {
     if (actionData?.error) {
-      console.log('Billing component: Error detected', actionData.error);
       setIsLoading(false);
       setLoadingPlanIndex(null);
       return;
     }
 
     if (actionData?.confirmationUrl && actionData?.success) {
-      console.log('Billing component: Processing redirect');
       setShowAuthModal(true);
       
       const performRedirect = () => {
-        console.log('Billing component: Attempting redirect to:', actionData.confirmationUrl);
-        
+
         try {
           // Make sure the URL includes the shop parameter
           let confirmationUrl = actionData.confirmationUrl;
@@ -340,10 +333,8 @@ export default function Billing() {
           const popupWindow = window.open(confirmationUrl, '_blank');
           
           if (popupWindow) {
-            console.log('Billing component: Opened in new window');
             setShowAuthModal(false);
           } else {
-            console.log('Billing component: Popup blocked, trying direct navigation');
             window.location.href = confirmationUrl;
           }
         } catch (error) {

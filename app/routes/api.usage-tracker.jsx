@@ -1,5 +1,11 @@
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "https://test-modera.myshopify.com",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
+};
+
 import { json } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -9,54 +15,45 @@ const prisma = new PrismaClient();
  * It's called each time a customer uses the virtual try-on functionality
  */
 export async function action({ request }) {
-  // Only accept POST requests for tracking usage
-  if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, { status: 405 });
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
-
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
-  
-  if (!shop) {
-    return json({ error: "Unauthorized" }, { status: 401 });
+  if (request.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: CORS_HEADERS }
+    );
   }
 
   try {
     // Get the request body
     const body = await request.json();
-    const { productId } = body;
+    const { productId, shop } = body;
     
-    if (!productId) {
-      return json({ error: "Missing required parameter: productId" }, { status: 400 });
+    if (!productId || !shop) {
+      return new Response(
+        JSON.stringify({ error: "Missing required parameter: productId or shop" }),
+        { status: 400, headers: CORS_HEADERS }
+      );
     }
 
-    // Get current subscription information
-    const response = await admin.graphql(
-      `#graphql
-        query getSubscription {
-          currentAppInstallation {
-            activeSubscriptions {
-              id
-              lineItems {
-                id
-              }
-            }
-          }
-        }
-      `
-    );
-    
-    const data = await response.json();
-    const activeSubscription = data?.data?.currentAppInstallation?.activeSubscriptions?.[0];
-    
-    if (!activeSubscription) {
-      return json({ error: "No active subscription found" }, { status: 400 });
+    // Получаем актуальный subscriptionId (chargeId) для магазина
+    const subscription = await prisma.subscription.findFirst({ where: { shop } });
+    if (!subscription || !subscription.chargeId) {
+      return new Response(
+        JSON.stringify({ error: "No active subscription found for this shop" }),
+        { status: 400, headers: CORS_HEADERS }
+      );
     }
+    const subscriptionId = subscription.chargeId;
 
     // Проверяем кредиты
     const credits = await prisma.credits.findUnique({ where: { shop } });
     if (!credits || credits.amount <= 0) {
-      return json({ error: "No credits left" }, { status: 402 });
+      return new Response(
+        JSON.stringify({ error: "No credits left" }),
+        { status: 402, headers: CORS_HEADERS }
+      );
     }
     // Списываем кредит
     await prisma.credits.update({
@@ -64,10 +61,6 @@ export async function action({ request }) {
       data: { amount: { decrement: 1 } }
     });
 
-    // Record usage for the subscription
-    const subscriptionId = activeSubscription.id;
-    const lineItemId = activeSubscription.lineItems[0].id;
-    
     // Record this usage in our database to track against limits
     const usage = await prisma.tryOnUsage.create({
       data: {
@@ -92,48 +85,25 @@ export async function action({ request }) {
       }
     });
 
-    // Record usage with Shopify
-    await admin.graphql(
-      `#graphql
-        mutation createUsageRecord($subscriptionLineItemId: ID!, $description: String!, $quantity: Int!) {
-          appUsageRecordCreate(
-            subscriptionLineItemId: $subscriptionLineItemId
-            description: $description
-            quantity: 1
-          ) {
-            appUsageRecord {
-              id
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `,
-      {
-        variables: {
-          subscriptionLineItemId: lineItemId,
-          description: `Virtual Try-On for product ${productId}`,
-          quantity: 1
-        }
-      }
+    return new Response(
+      JSON.stringify({ success: true, usageCount, usageId: usage.id }),
+      { status: 200, headers: CORS_HEADERS }
     );
-
-    return json({ 
-      success: true, 
-      usageCount, 
-      usageId: usage.id 
-    });
-
   } catch (error) {
     console.error("Error tracking usage:", error);
-    return json({ error: "Failed to track usage" }, { status: 500 });
+    return new Response(
+      JSON.stringify({ error: "Failed to track usage" }),
+      { status: 500, headers: CORS_HEADERS }
+    );
   }
 }
 
 // Get the current usage stats for the store
 export async function loader({ request }) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   
@@ -194,4 +164,4 @@ export async function loader({ request }) {
     console.error("Error fetching usage stats:", error);
     return json({ error: "Failed to fetch usage stats" }, { status: 500 });
   }
-} 
+}

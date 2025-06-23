@@ -338,18 +338,6 @@
     content.appendChild(iframe);
     
     document.getElementById('vton-modal').style.display = 'block';
-    
-    // Track usage
-    fetch(`${VTON_API_URL}/track-usage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        shop: SHOP_DOMAIN,
-        productId: productId
-      })
-    }).catch(err => console.error('Error tracking usage:', err));
   }
 
   // Close the modal
@@ -363,4 +351,4 @@
   } else {
     createTryOnButton();
   }
-})(); 
+})();
